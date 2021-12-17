@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load static %}
+{% load django_bootstrap5 %}
+
+{% block nav %}
+	{% include "navbar.html" %}
+{% endblock %}
+
+
+{% block content %}
+<div class="container">
+
+  <div class="jumbotron">
+    <div class="form-group">
+      <form action="/job_add" method="post">
+        {% csrf_token %}
+        <label for="{{ form_add.path.id_for_label }}">Add Job</label>
+        <input type="text" class="form-control" name="{{ form_add.path.name }}" />
+          {% for error in form_add.path.errors %}
+            <div class="text-danger"><small>{{ error }}</small></div>
+          {% endfor %}
+        <button type='submit' class='btn btn-primary' name="job_add">Add</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="jumbotron">
+    <div class="form-group">
+      <form action="/job_add" method="post">
+        {% csrf_token %}
+        <label for="{{ form_create.path.id_for_label }}">Create Job</label>
+        <input type="text" class="form-control" name="{{ form_create.path.name }}" />
+				<!-- <img src="{% static "img/explore-icon.png" %}" width="32" height="32" /> -->
+          {% for error in form_create.path.errors %}
+            <div class="text-danger"><small>{{ error }}</small></div>
+          {% endfor %}
+        <button type='submit' class='btn btn-primary' name="job_create">Create</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

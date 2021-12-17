@@ -1,0 +1,23 @@
+{
+	"env": [
+		{
+			"PATH": {
+				"method":"prepend",
+				"value": ["C:/ProgramData/Redshift/bin"]
+			}
+		},
+		{
+			"HOUDINI_PATH": {
+				"method":"prepend",
+				"value": ["C:/ProgramData/Redshift/Plugins/Houdini/19.0.383"]
+			}
+		},
+		{
+			"PXR_PLUGINPATH_NAME": {
+				"method":"prepend",
+				"value": ["C:/ProgramData/Redshift/Plugins/Solaris/19.0.383"]
+			}
+		},		
+		
+	],
+}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.1/font/bootstrap-icons.css">
+{% endblock %}
+
+{% block nav %}
+	{% include "navbar.html" %}
+{% endblock nav %}
+
+{% block content %}
+
+	{% include "sidebar.html" %}
+	<div class="container">
+			{% if asset.exists %}
+				<div class="asset p-4 my-5 rounded-lg" style="background-color: #eee;">
+					<div class="row">
+						<div class="col-4">
+							<div class="grid">
+							<div class="grid-sizer"></div>
+							<div class="grid-item" style="width:100%;">
+								<div class="item">
+									{% include "asset.html" with showbackbtn=False %}
+								</div>
+							</div>
+						</div>
+						</div> <!-- col 1 -->
+						<div class="col"  >
+							<div class="asset-details d-flex align-items-start flex-column bd-highlight mb-3" style="height:100%;">
+
+								<div class="mb-auto p-2 bd-highlight" style="width:100%">
+										<table class="table table-sm table-hover" style="font-size: 0.8rem;">
+											<tbody>
+												<tr><th scope="col">Job</th><th scope="col">{{ job }}</th></tr>
+												<tr><th scope="col">Name</th><th scope="col">{{ asset.name }}</th></tr>
+												<tr><th scope="col">Path</th><th scope="col">{{ asset.path }}</th></tr>
+												<tr><th scope="col">Version</th><th scope="col">{{ asset.version }}</th></tr>
+												<tr><th scope="col">Date</th><th scope="col">{{ asset.date }}</th></tr>
+												<tr><th scope="col">User</th><th scope="col">{{ asset.user }}</th></tr>
+												<tr><th scope="col">Description</th><th scope="col">{{ asset.description }}</th></tr>
+											</tbody>
+										</table>
+								</div>
+								<div class="p-2 bd-highlight">
+										{% for format, formatname in asset.formats %}
+										<a href="/assets/{{ job }}?path={{ asset.path }}&version={{asset.version}}&format={{format}}" data-toggle="tooltip" data-placement="top" title="{{ formatname }}">
+											<span class="border border-primary p-2 mx-1 rounded " style="font-size: 0.8rem;">
+
+													{{ format }}
+
+											</span>
+											</a>
+										{% endfor %}
+								</div>
+							</div> <!-- asset-details -->
+						</div> <!-- col 2 -->
+
+					</div> <!-- row -->
+
+				</div> <!-- asset -->
+			{% endif %}
+
+			<div class="grid rounded-lg">
+				<div class="grid-sizer"></div>
+				<!-- FOR EACH ASSET -->
+				{% for asset in asset_list %}
+				<div class="grid-item">
+					<div class="item">
+
+						{% include "asset.html" with showbackbtn=True %}
+
+					</div> <!-- item -->
+				</div> <!-- grid-item -->
+				{% endfor %}
+			</div> <!-- grid -->
+
+
+</div> <!-- container -->
+{% endblock %}
+
+{% block javascript %}
+$(document).ready(function(){
+
+//const csrftoken = Cookies.get('csrftoken');
+
+	$(function () {
+  $('[data-toggle="tooltip"]').tooltip()
+	})
+
+	var $grid = $('.grid').isotope({
+			initLayout: false,
+			itemSelector: '.grid-item',
+			layoutMode: 'packery',
+			packery: { columnWidth: '.grid-sizer' },
+			transitionDuration: 400,
+			containerStyle: {overflow: 'visible', position: 'relative'}
+		});
+		$grid.imagesLoaded().progress( function() { $grid.isotope('layout') });
+
+});
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block nav %}
+	{% include "navbar.html" %}
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="container">
+<div class="grid">
+	<div class="grid-sizer">
+	</div>
+		<!-- FOR EACH JOB -->
+		{% for job in job_list %}
+		<div class="grid-item">
+			<div class="item">
+					<img class="item-cover" src="{% if job.hasCover %} /image/{{job.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
+					<div class="overlay uploadcover" data-url="/thumbnail/?job={{ job.path }}">
+						<div class="item-title">
+							<!-- <span class="item-anim"></span> -->
+							<a href='/job/{{ job.path }}'><h1>{{ job.name }}</h1></a>
+						</div> <!-- item-title -->
+						<div class="item-apps">
+						<!-- APPS -->
+							<!-- Explore -->
+							<a href="#" class="job-app" data-path="{{ job.path }}" data-app="explore" title="explore" data-toogle="tooltip">
+								<img src="{% static "img/explore-icon.png" %}" width="32" height="32" />
+							</a>
+							<!-- HOUDINI -->
+							<a href="#" class="job-app" data-path="{{ job.path }}" data-app="houdini" title="houdini" data-toggle="tooltip">
+								<img src="{% static "img/houdini_icon.png" %}" width="32" height="32" />
+							</a>
+							<!-- MAYA -->
+							<a href="#" class="job-app" data-path="{{ job.path }}" data-app="maya" title="maya" data-toggle="tooltip">
+								<img src="{% static "img/maya_icon.png" %}" width="32" height="32" />
+							</a>
+
+						</div> <!-- item-apps -->
+				</div> <!-- overlay -->
+			</div> <!-- item -->
+		</div> <!-- grid-item -->
+		{% endfor %}
+
+	  <!-- ADD -->
+	  <div class="grid-item">
+			<div class="item">
+				<img class="item-cover" src="{% static '/img/default-cover.jpg' %}" />
+				<div class="overlay" style="opacity:1">
+					<div class="item-title">
+	          <a href="{% url 'job_add' %}">
+	            <h1 style="font-size: 48px;">+</h1>
+	          </a>
+					</div> <!-- item-title -->
+				</div> <!-- overlay -->
+			</div> <!-- item -->
+		</div> <!-- grid-item -->
+</div> <!-- grid -->
+</div> <!-- container -->
+
+{% endblock %}
+
+
+{% block javascript %}
+$(document).ready(function(){
+	const csrftoken = Cookies.get('csrftoken');
+
+	// ISOTROPE
+	var $grid = $('.grid').isotope({
+			initLayout: false,
+			itemSelector: '.grid-item',
+			layoutMode: 'packery',
+			packery: { columnWidth: '.grid-sizer' },
+			transitionDuration: 400,
+			containerStyle: {overflow: 'visible', position: 'relative'}
+		});
+	$grid.imagesLoaded().progress( function() { $grid.isotope('layout') });
+
+	// DROPZONES
+
+	$(".uploadcover").each( function(){
+		$(this).dropzone({
+			url: $(this).data('url'),
+			headers: { "X-CSRFToken": csrftoken },
+			createImageThumbnails: false,
+			chunking: true,
+			clickable: false,
+			disablePreviews: true,
+			resizeWidth: 512,
+			resizeMimeType: "image/png",
+			resizeQuality: 1,
+			resizeMethod: "crop",
+			success: function(file, response){
+				location.reload()
+			}
+		});
+	});
+
+
+
+	// APPS
+	$(".job-app").click(function(){
+		var path = $(this).data("path");
+		var app = $(this).data("app");
+
+		$.ajax({
+			headers: { "X-CSRFToken": csrftoken },
+			type: "POST",
+			url: "job_app",
+			data: {"ajax":true, "path":path, "app":app},
+			success: function(b) {
+				if(b != "")
+				{
+					var history = $(".footer .container").html();
+					history = history.replace('class="console"', '')
+					footer = '<span class="console">';
+					footer+= b;
+					footer+= '</span></br>';
+					footer+= history;
+
+					$(".footer .container").html( footer );
+				}
+			}
+		});
+	});
+
+
+});
+{% endblock %}

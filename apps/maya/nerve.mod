@@ -1,0 +1,3 @@
++ NERVE6 6.0 .
+PYTHONPATH+:=../../lib
+MAYA_SCRIPT_PATH+:=mel

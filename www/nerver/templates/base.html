@@ -1,0 +1,51 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Nerve</title>
+    <meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- jQuery / JScookie -->
+    <script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+    <script src="{% static 'js/js.cookie.min.js' %}"></script>
+
+    <!-- Bootstrap Local -->
+    <link rel="stylesheet" href="{% static 'css/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/bootstrap/bootstrap.css' %}">
+    <script src="{% static 'js/bootstrap/popper.min.js' %}"></script>
+    <script src="{% static 'js/bootstrap/bootstrap.min.js' %}"></script>
+
+    <!-- Isotope -->
+    <script src="{% static 'js/isotope/isotope.pkgd.min.js' %}"></script>
+    <script src="{% static 'js/isotope/imagesloaded.pkgd.min.js' %}"></script>
+		<script src="{% static 'js/isotope/packery-mode.pkgd.min.js' %}"></script>
+
+    <!-- Dropzone -->
+      <script src="{% static 'js/dropzone/dropzone.min.js' %}"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Sans&family=Open+Sans&family=Roboto&display=swap" rel="stylesheet">
+    <!-- CSS -->
+    <link href="{% static 'css/base.css' %}" rel="stylesheet" type="text/css">
+
+    <!-- JS -->
+		<script type="text/javascript">
+			{% block javascript %}{% endblock %}
+		</script>
+
+  {% block head %} {% endblock head %}
+
+  </head>
+  <body>
+    {% block nav %}{% endblock nav %}
+    {% block content %}{% endblock content %}
+
+    <div class="fixed-bottom footer">
+        <div class="container">
+      </div>
+    </div>
+  </body>
+</html>

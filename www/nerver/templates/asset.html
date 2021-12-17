@@ -1,0 +1,43 @@
+{% load static %}
+<img class="item-cover" src="{% static '/img/default-cover.jpg' %}" />
+<div class="overlay" style='opacity:1'>
+  <div class="item-title">
+    <a href='/assets/{{ job }}?path={{asset.path}}'><h1>{{ asset.name }}</h1></a>
+  </div> <!-- item-title -->
+  <div class="item-apps row">
+  <!-- APPS -->
+  <div class="col">
+
+    {% if asset.hasChildren and showbackbtn %}
+      <a href="/assets/{{ job }}?path={{asset.path}}">
+        <i class="bi bi-folder-symlink" style="font-size: 1.5rem;"></i>
+      </a>
+    {% endif %}
+
+    {% if asset.hasParent %}
+      <a href="/assets/{{ job }}?path={{asset.parent}}">
+        <i class="bi bi-backspace" style="font-size: 1.5rem;"></i>
+      </a>
+    {% endif %}
+    <!--
+      <a href="#" >
+        <i class="bi bi-boxes" style="font-size: 1.5rem;"></i>
+      </a>
+    -->
+  </div>
+  <div class="col-3">
+
+    <div class="dropup" style="display:inline">
+      <button class="btn btn btn-dark dropdown-toggle version" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-path="{{ asset.path }}" data-job="{{ job }}">
+        <span> {{ asset.versionAsString }} </span>
+      </button>
+      <div class="dropdown-menu versions" aria-labelledby="dropdownMenuButton">
+        {% for version, versionAsString in asset.versions %}
+          <a class="dropdown-item" href="/assets/{{ job }}?path={{asset.path}}&version={{ version }}"> {{ versionAsString }} </a>
+         {% endfor %}
+       </div>
+    </div>
+  </div>
+
+  </div> <!-- item-apps-->
+</div> <!-- overlay -->
