@@ -5,6 +5,7 @@ APP_DIR = nerve.Path(__file__).GetParent(3) + 'apps'
 
 class Base:
     def __init__(self):
+        #
         self.data['appath'] = self.data['path'] + self.data['name']
         self.data['cmdpath'] = self.data['appath'] + (self.data['name'] + '.cmd')
         self.data['cmdpath'].SetContent( self.LoadCmd() )

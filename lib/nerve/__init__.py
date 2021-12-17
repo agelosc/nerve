@@ -541,6 +541,7 @@ class SublayerBase(Base):
 
         # Set Custom Layer Data
         self.SetCustomLayerData(layer)
+        
 
         #layer.SetPerimissionToEdit(True)
         stage = Usd.Stage.Open(layer.identifier)
