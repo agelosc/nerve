@@ -339,7 +339,30 @@ class Config(dict):
             self.update( data )
 
         self['path'] = nrvpath
+        self['local'] = self.GetLocalData()
         return self
+
+    def GetLocalData(self):
+        datafile = Path('$APPDATA') + 'nerve' + 'nerve.json'
+        if datafile.Exists():
+            with open(datafile.AsString()) as json_file:
+                data = json.load(json_file)
+            return data
+
+        return {}
+
+    def SetLocalData(self, indata=None):
+        if 'local' not in self.keys():
+            self['local'] = {}
+
+        datafile = Path('$APPDATA') + 'nerve' + 'nerve.json'
+
+        if not datafile.Exists():
+            datafile.SetContent('{}')
+            datafile.Create()
+
+        with open(datafile.AsString(), 'w') as outfile:
+            json.dump( self['local'], outfile)
 
 class USD:
     @classmethod
@@ -391,6 +414,7 @@ class USD:
         stage.SetDefaultPrim(prim)
         layer.Save()
 
+
 class Base:
     def __init__(self, **kwargs):
         for attr in ['data', 'paths', 'patterns']:
@@ -425,6 +449,18 @@ class Base:
     def GetName(self):
         return self.GetPath().GetHead()
 
+    def Exists(self):
+        return self.GetFilePath().Exists()
+
+    def GetCover(self):
+        file = self.GetFilePath()
+        ext = file.GetExtension()
+        file = file.AsString().replace( '.'+ext, '.png' )
+        return Path(file)
+
+    def HasCover(self):
+        return self.GetCover().Exists()
+
     def SetCustomLayerData(self, layer=None):
         if layer is None:
             layer = USD.FindOrOpen(self.GetFilePath())
@@ -441,6 +477,59 @@ class Base:
         if layer is None:
             layer = USD.OpenAsAnonymous(self.GetFilePath())
         return layer.customLayerData
+
+class Job(Base):
+    def __init__(self, directory, **kwargs):
+        Base.__init__(self, **kwargs)
+
+        self.data['directory'] = Path(directory)
+
+        defaults = {}
+        defaults['fps'] = 25
+        self.SetDefaults(defaults, **kwargs)
+
+        self.paths['main'] = Path(directory) + conf['DIR'] + 'job.usda'
+
+    def Create(self):
+        from pxr import Usd, UsdGeom
+
+        self.GetFilePath().GetParent().Create()
+
+        layer = USD.CreateOrOpen( self.GetFilePath() )
+        layer.Clear()
+        stage = Usd.Stage.Open(layer)
+
+        UsdGeom.SetStageMetersPerUnit(stage, 1)
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+        layer.Save()
+
+    @staticmethod
+    def AddToRecent(path):
+        key = 'recentJobs'
+        if key in conf['local'].keys() and path not in conf['local'][key]:
+            conf['local'][key].append( path )
+        else:
+            conf['local'][key] = [ path ]
+        conf.SetLocalData()
+
+    @staticmethod
+    def GetRecent():
+        key = 'recentJobs'
+
+        if key in conf['local'].keys():
+            update = False
+            for recent in conf['local'][key]:
+                # Remove Jobs that don't exist
+                if not Job(recent).Exists():
+                    conf['local'].remove(recent)
+                    update = True
+            if update:
+                conf.SetLocalData()
+        else:
+            return []
+
+        return conf['local'][key]
+
 
 class SublayerBase(Base):
     def __init__(self, path, **kwargs):
@@ -541,7 +630,7 @@ class SublayerBase(Base):
 
         # Set Custom Layer Data
         self.SetCustomLayerData(layer)
-        
+
 
         #layer.SetPerimissionToEdit(True)
         stage = Usd.Stage.Open(layer.identifier)

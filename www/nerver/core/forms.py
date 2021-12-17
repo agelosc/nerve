@@ -48,9 +48,9 @@ class job_add(forms.Form):
             raise forms.ValidationError('Drive Letter not available.')
         segments.pop(0)
         for seg in segments:
-            if not seg.isalnum() or nerve.illegalCharacters(seg):
+            if not seg.isalnum() or nerve.String.IllegalCharacters(seg):
                 raise forms.ValidationError('Path should only include letters or numbers.')
-            if not nerve.isEnglish(seg):
+            if not nerve.String.isEnglish(seg):
                 raise forms.ValidationError('Only English characters allowed.')
 
         if not path_add.Exists():

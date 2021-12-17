@@ -13,7 +13,7 @@ import nerve.apps
 def image(request, path):
     return FileResponse(open(path, 'rb'))
 
-def index(request):
+def jobs(request):
 
     job_list = []
     for recent in nerve.Job.GetRecent():
@@ -21,8 +21,8 @@ def index(request):
         Job = nerve.Job(recent)
         data['path'] = recent
         data['name'] = nerve.Path(recent).GetHead()
-        data['hasCover'] = Job.GetCoverPath().Exists()
-        data['cover'] = Job.GetCoverPath()
+        data['hasCover'] = Job.HasCover()
+        data['cover'] = Job.GetCover()
 
         job_list.append(data)
 

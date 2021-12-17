@@ -238,12 +238,10 @@ def AppTests():
 
         app.Create()
 
-
 #PathTests()
 
 asset = nerve.Asset('test', job='R:/lib')
 print(asset.paths)
-
 
 #LayerTests()
 #SublayerTests()
