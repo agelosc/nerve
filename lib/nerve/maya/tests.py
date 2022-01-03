@@ -7,7 +7,6 @@ reload(nerve.maya)
 
 import maya.cmds as cmds
 
-
 def All():
     Alembic()
     OBJ()
@@ -541,3 +540,22 @@ def Assets():
     output+= r'##########################\n'
 
     cmds.evalDeferred('print("{}");'.format(output) )
+
+def Nodes():
+    cmds.file(force=True, new=True)
+    mat = cmds.shadingNode('RedshiftMaterial', asShader=True)
+    tex = cmds.shadingNode('file', asShader=True)
+    grp = cmds.createNode('transform')
+    tra = cmds.createNode('transform')
+    cmds.parent(tra, grp)[0]
+    tra = cmds.ls(sl=True, l=True)[0]
+
+    cmds.select([mat, tex, grp, tra], r=True)
+    nodes = nerve.maya.GetSelectedNodes()
+
+    cmds.file(force=True, new=True)
+    for node in nodes:
+        node.Create()
+
+    for n in [mat, tex, grp]:
+        assert cmds.objExists(n)

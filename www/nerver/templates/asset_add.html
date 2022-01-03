@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.1/font/bootstrap-icons.css">
+{% endblock %}
+
+{% block nav %}
+	{% include "navbar.html" %}
+{% endblock nav %}
+
+{% block content %}
+  {% include "sidebar.html" %}
+  <div class="container">
+    <div class="form-group">
+      <form action="/asset_add" method="post">
+        {% csrf_token %}
+
+        <!-- Job -->
+        {% with field=form.job val=GET.job %}
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          <input type="text" class="form-control" name="{{ field.name }}" value="{{val}}" />
+        {% endwith %}
+
+        <!-- Path -->
+        {% with field=form.path val=GET.path%}
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+					<input type="text" class="form-control" name="{{ field.name }}"  value="{{val}}" />
+        {% endwith %}
+
+        <!-- Name -->
+        {% with field=form.name %}
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          <input type="text" class="form-control" name="{{ field.name }}" />
+        {% endwith %}
+
+        <!-- Asset File(s) -->
+        {% with field=form.file %}
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+					<div class="input-group">
+	          <input type="text" class="form-control" name="{{ field.name }}" />
+						<a href="#" class="browse">
+							<img src="{% static "img/explore-icon.png" %}" width="32" height="32" />
+						</a>
+					</div>
+        {% endwith %}
+
+				<label for="{{ form.format.id_for_label }}">{{ form.format.label }}</label>
+				{{ form.format }}
+
+				<label for="{{ form.version.id_for_label }}">{{ form.version.label }}</label>
+				{{ form.version }}
+
+        <button type='submit' class='btn btn-primary' name='asset_add'>Add</button>
+
+      </form>
+    </div>
+  </div>
+{% endblock content %}

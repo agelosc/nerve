@@ -19,7 +19,7 @@
 					<div class="overlay uploadcover" data-url="/thumbnail/?job={{ job.path }}">
 						<div class="item-title">
 							<!-- <span class="item-anim"></span> -->
-							<a href='/job/{{ job.path }}'><h1>{{ job.name }}</h1></a>
+							<a href='/assets/?job={{ job.path }}'><h1>{{ job.name }}</h1></a>
 						</div> <!-- item-title -->
 						<div class="item-apps">
 						<!-- APPS -->
@@ -66,6 +66,7 @@ $(document).ready(function(){
 	const csrftoken = Cookies.get('csrftoken');
 
 	// ISOTROPE
+	/*
 	var $grid = $('.grid').isotope({
 			initLayout: false,
 			itemSelector: '.grid-item',
@@ -75,6 +76,15 @@ $(document).ready(function(){
 			containerStyle: {overflow: 'visible', position: 'relative'}
 		});
 	$grid.imagesLoaded().progress( function() { $grid.isotope('layout') });
+	*/
+
+	var $grid = $('.grid').packery({
+		itemSelector: '.grid-item',
+		columnWidth: '.grid-sizer',
+		rowHeight: '.item-cover',
+		percentPosition: true
+	});
+
 
 	// DROPZONES
 

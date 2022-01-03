@@ -92,11 +92,22 @@ def CreateShot(*args):
     print('Shot '+name+' created...')
     return name
 
+class Asset:
+    def __init__(self):
+        self.ctrl = {}
+        self.name = 'Asset'
+        self.width = 600
+        self.height = 600
+
+        self.Release()
+
+    def Release(self):
+        pass
 
 class Menu:
     def __init__(self):
         self.ctrl = {}
-        self.name = 'Nerve6'
+        self.name = 'Nerve'
 
         if cmds.menu(self.name, exists=True):
             cmds.deleteUI(self.name)
@@ -108,35 +119,119 @@ class Menu:
         cmds.menuItem(subMenu=False, label='Explore', parent=self.ctrl['mainMenu'], command=utils.Explore)
 
         # Layers
-        cmds.menuItem(divider=True, dividerLabel='Layers', parent=self.ctrl['mainMenu'])
-        self.ctrl['layerMenu'] = cmds.menuItem(subMenu=True, label='Sequences', tearOff=True, parent=self.ctrl['mainMenu'])
-        cmds.menuItem(self.ctrl['layerMenu'], e=True, postMenuCommand=partial(self.LayerMenu, self.ctrl['layerMenu']), postMenuCommandOnce=False)
+        if False:
+            cmds.menuItem(divider=True, dividerLabel='Layers', parent=self.ctrl['mainMenu'])
+            self.ctrl['layerMenu'] = cmds.menuItem(subMenu=True, label='Sequences', tearOff=True, parent=self.ctrl['mainMenu'])
+            cmds.menuItem(self.ctrl['layerMenu'], e=True, postMenuCommand=partial(self.LayerMenu, self.ctrl['layerMenu']), postMenuCommandOnce=False)
 
         # Tools
         cmds.menuItem(divider=True, dividerLabel='Tools', parent=self.ctrl['mainMenu'])
+        self.Tools()
         #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Utilities', parent=self.ctrl['mainMenu'])
         #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Modeling', parent=self.ctrl['mainMenu'])
         #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Animation', parent=self.ctrl['mainMenu'])
         #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Rigging', parent=self.ctrl['mainMenu'])
-        self.ctrl['rendering'] = cmds.menuItem(subMenu=True, label='Rendering', parent=self.ctrl['mainMenu'])
-        cmds.menuItem(subMenu=False, label='Submit To Deadline...', parent=self.ctrl['rendering'], command=utils.deadlineRender)
-        cmds.menuItem(subMenu=False, label='Local Render...', parent=self.ctrl['rendering'], command=utils.localRender)
+        #self.ctrl['rendering'] = cmds.menuItem(subMenu=True, label='Rendering', parent=self.ctrl['mainMenu'])
+        #cmds.menuItem(subMenu=False, label='Submit To Deadline...', parent=self.ctrl['rendering'], command=utils.deadlineRender)
+        #cmds.menuItem(subMenu=False, label='Local Render...', parent=self.ctrl['rendering'], command=utils.localRender)
+
+        cmds.menuItem(divider=True, parent=self.ctrl['mainMenu'])
+        cmds.menuItem(subMenu=False, label='Reload Nerve...', parent=self.ctrl['mainMenu'], command=self.reloadNerve)
 
 
+        if False:
+            cmds.menuItem(divider=True, dividerLabel='Assets', parent=self.ctrl['mainMenu'])
+            cmds.menuItem(subMenu=False, label='Asset Gather...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Assets', 'gather'))
+            cmds.menuItem(subMenu=False, label='Asset Release...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Assets', 'release'))
 
-        cmds.menuItem(divider=True, dividerLabel='Assets', parent=self.ctrl['mainMenu'])
-        cmds.menuItem(subMenu=False, label='Asset Gather...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Assets', 'gather'))
-        cmds.menuItem(subMenu=False, label='Asset Release...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Assets', 'release'))
+        if False:
+            # Sublayers
+            cmds.menuItem(divider=True, dividerLabel='Sublayers', parent=self.ctrl['mainMenu'])
+            cmds.menuItem(subMenu=False, label='Sublayer Gather...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'gather'))
+            cmds.menuItem(subMenu=False, label='Sublayer Release...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'release'))
 
-        # Sublayers
-        cmds.menuItem(divider=True, dividerLabel='Sublayers', parent=self.ctrl['mainMenu'])
-        cmds.menuItem(subMenu=False, label='Sublayer Gather...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'gather'))
-        cmds.menuItem(subMenu=False, label='Sublayer Release...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'release'))
+    def reloadNerve(self, *args):
+        import nerve
+        reload(nerve)
+        import nerve.maya
+        reload(nerve.maya)
+        import nerve.maya.tools
+        reload(nerve.maya.tools)
+        import nerve.maya.UI
+        reload(nerve.maya.UI)
+        nerve.maya.UI.Menu()
+
+    def tool(self, *args):
+        if len(args)>2:
+            return args[0](*args[1:])
+        else:
+            return args[0]()
+
+    def Tools(self):
+        import nerve.maya.tools
+        reload(nerve.maya.tools)
+
+        def sep(label='', parent=self.ctrl['mainMenu']):
+            args = {}
+            args['divider'] = True
+            args['parent'] = parent
+            if label:
+                args['dividerLabel'] = label
+            cmds.menuItem(**args)
+
+        def grp(label='', parent=self.ctrl['mainMenu']):
+            return cmds.menuItem(subMenu=True, label=label, parent=parent, tearOff=True)
+
+        def itm(label='', parent=self.ctrl['mainMenu'], cmd=None, args=[]):
+            cmds.menuItem(subMenu=False, label=label, parent=parent, command=partial(self.tool, cmd, *args))
+
+
+        self.ctrl['utils'] = grp('Utilities')
+        if True: # Utilities
+            parent = self.ctrl['utils']
+            sep('Duplicate', parent)
+            itm('Duplicate', parent, nerve.maya.tools.duplicate)
+            itm('Instance', parent, nerve.maya.tools.instance)
+            itm('Duplicate With Input Graph', parent, nerve.maya.tools.duplicateInputGraph)
+            sep('Locators', parent)
+            itm('Locator To Pivot', parent, nerve.maya.tools.locatorToPivot)
+            itm('Locator To Average', parent, nerve.maya.tools.locatorToAverage)
+            sep('References', parent)
+            itm('Import Reference', parent, nerve.maya.tools.importReference)
+            itm('Remove Reference', parent, nerve.maya.tools.removeReference)
+            sep('Namespaces', parent)
+            itm('Clear Namespaces', parent, nerve.maya.tools.clearNamespaces)
+            sep('Unknown', parent)
+            itm('Remove Unknown Nodes', parent, nerve.maya.tools.removeUnknownNodes)
+            itm('Remove Unknown Plugins', parent, nerve.maya.tools.removeUnknownPlugins)
+            itm('Remove Turtle Plugin', parent, nerve.maya.tools.removeTurtle)
+
+        self.ctrl['redshift'] = grp('Redshift')
+        if True: # Redshift
+            parent = self.ctrl['redshift']
+            itm('Release...', parent, nerve.maya.tools.rsRelease)
+            itm('Gather...', parent, nerve.maya.tools.rsGather)
+            sep('', parent)
+            itm('Lock Proxy History', parent, nerve.maya.tools.lockRsProxyHistory)
+            sep('', parent)
+            itm('Enable Tesselation', parent, nerve.maya.tools.enableRsTesselation)
+            itm('Disable Tesselation', parent, nerve.maya.tools.disableRsTesselation)
+            sep('', parent)
+            itm('Enable Displacement', parent, nerve.maya.tools.enableRsDisplacement)
+            itm('Disable Displacement', parent, nerve.maya.tools.disableRsDisplacement)
+
+        self.ctrl['render'] = grp('Rendering')
+        if True: # Rendering
+            parent = self.ctrl['render']
+            sep('Smooth Render', parent)
+            itm('Enable Smooth Render', parent, nerve.maya.tools.enableSmoothRender)
+            itm('Disable Smooth Render', parent, nerve.maya.tools.disableSmoothRender)
+            sep('Render', parent)
+            itm('Local Render', parent, nerve.maya.tools.localRender)
 
 
     def Manager(self, *args):
         Manager(args[0], args[1])
-
 
     def LayerMenu(self, *args):
         ctrl = args[0]
@@ -171,7 +266,6 @@ class Menu:
 
     def SetFrameRange(self, *args):
         cmds.playbackOptions(e=True, min=args[0], max=args[1])
-
 
 class Base:
     def GetWidth(self, div=2):

@@ -7,9 +7,88 @@ import maya.cmds as cmds
 import maya.mel as mel
 import maya.utils as mu
 
-#
-print("NERVE 6::Initialising...")
-mu.executeDeferred('gNerve = nerve.maya.deferred();')
+class Path(nerve.Path):
+    def __init__(self, path):
+        nerve.Path.__init__(self, path, '|')
+
+    def ClearNamespaces(self):
+        path = Path('|'.join(self.segments))
+        for i in range(len(path.segments)):
+            path.segments[i] = path.segments[i].split(':')[-1]
+        return path
+
+class Node(nerve.Node):
+    def __init__(self, **kwargs):
+        nerve.Node.__init__(self, **kwargs)
+
+    def SetDataFromScene(self, path=None):
+        if path is None:
+            path = self.data['path']
+
+        self.data['name'] = path.AsString().split('|')[-1].split(':')[-1]
+        self.data['path'] = path
+        self.data['type'] = cmds.nodeType(path)
+        self.data['app'] = 'maya'
+        self.data['classification'] = cmds.getClassification( self.data['type'] )[0]
+        self.data['hasParent'] = path.HasParent()
+        self.data['parent'] = self.GetParentData()
+        self.data['dirty'] = False
+
+    def GetParentData(self):
+        path = Path(self.data['path'])
+        if not path.HasParent():
+            return None
+        args = {}
+        args['path'] = path.GetParent()
+        args['name'] = Path(path.GetHead()).ClearNamespaces()
+        args['type'] = cmds.nodeType(self.data['path'])
+
+        return Node(**args).data
+
+    def HasParent(self):
+        return self.data['hasParent']
+
+    def GetParent(self):
+        return Node( **self.data['parent'] )
+
+    def GetPath(self):
+        return self.data['path']
+
+    def Create(self):
+        if self.data['type'] not in cmds.allNodeTypes():
+            raise Exception('Node type {} is invalid.'.format(self.data['type']))
+
+        if 'shader' in self.data['classification']:
+            return cmds.shadingNode(self.data['type'], asShader=True, name=self.data['name'])
+        else:
+            if not self.HasParent():
+                return cmds.createNode(self.data['type'], name=self.data['name'] )
+
+            # Has Parent
+            if self.GetParent().Exists():
+                return cmds.createNode(self.data['type'], name=self.data['name'], parent=self.GetParent().GetPath() )
+            else:
+                return self.GetParent().Create()
+
+    def Exists(self):
+        return cmds.objExists(self.data['path'])
+
+def GetSelectedNodes():
+    sel = cmds.ls(sl=True, l=True)
+    nodes = []
+    for n in sel:
+        nodes.append( node(n) )
+
+    return nodes
+
+def node(path):
+    node = Node()
+    node.SetDataFromScene(path)
+    return node
+
+def menu():
+    print("NERVE::Initialising...")
+    mu.executeDeferred('gNerve = nerve.maya.deferred();')
 
 def deferred():
     gMainWindow = mel.eval('global string $gMainWindow; $temp1=$gMainWindow;')
@@ -82,7 +161,6 @@ def Gather(file, mode='reference', **kwargs):
     if hasattr(obj, mode):
         getattr(obj, mode)(file, **kwargs)
     print("object attribute \"{}\" does not exist.".format(mode))
-
 
 class Base:
     def __init__(self, **kwargs):

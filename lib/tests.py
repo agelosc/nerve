@@ -205,15 +205,17 @@ def SublayerTests():
 
 def AssetTests():
     asset = nerve.Asset('modelA')
-
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
-    asset.Create()
 
+    asset.Create()
+    assert asset.Exists() is True
     asset = nerve.Asset('blah/ModelB')
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
+
     asset.Create()
+    assert asset.Exists() is True
 
 def LibTests():
     asset = nerve.Asset('modelA')
@@ -238,11 +240,21 @@ def AppTests():
 
         app.Create()
 
-#PathTests()
+def JobTests():
+    job = nerve.Job()
 
-asset = nerve.Asset('test', job='R:/lib')
-print(asset.paths)
+    if job.Exists():
+        job.Delete()
+    assert job.Exists() is False
 
+    job.Create()
+    assert job.Exists() is True
+
+    assert job.GetAssets() == []
+
+PathTests()
+#JobTests()
+#AssetTests()
 #LayerTests()
 #SublayerTests()
 #AssetTests()

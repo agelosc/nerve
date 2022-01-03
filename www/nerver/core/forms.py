@@ -20,9 +20,9 @@ class job_create(forms.Form):
             raise forms.ValidationError('Drive Letter not available.')
         segments.pop(0)
         for seg in segments:
-            if not seg.isalnum() or nerve.illegalCharacters(seg):
+            if not seg.isalnum() or nerve.String.IllegalCharacters(seg):
                 raise forms.ValidationError('Path should only include letters or numbers.')
-            if not nerve.isEnglish(seg):
+            if not nerve.String.isEnglish(seg):
                 raise forms.ValidationError('Only English characters allowed.')
 
         if path_create.Exists() and nerve.Job(path_create).Exists():
@@ -57,3 +57,23 @@ class job_add(forms.Form):
             raise forms.ValidationError('Job does not exist.')
 
         return path_add.AsString()
+
+class asset_add(forms.Form):
+    job = forms.CharField(label="Job")
+    path = forms.CharField( label='Path')
+    name = forms.CharField(label='Name')
+    file = forms.CharField(label="File")
+
+    FORMATS = (("One", "one"), ("Two", "two"))
+    format = forms.TypedChoiceField(
+        label="Format",
+        choices=FORMATS,
+        widget=forms.Select(attrs={'class': "form-control"})
+    )
+
+    VERSIONS = (("One", "one"), ("Two", "two"))
+    version = forms.TypedChoiceField(
+        label="Version",
+        choices=VERSIONS,
+        widget=forms.Select(attrs={'class': "form-control"})
+    )

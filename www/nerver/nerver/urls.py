@@ -21,11 +21,19 @@ from core import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.jobs, name='jobs'),
+    path('assets/', views.assets, name="job"),
+    path('asset_add/', views.asset_add, name="asset_add"),
+
+
     path('image/<path:path>', views.image, name="image"),
+
     path('job_app', views.job_app, name='job_app'),
+    path('browse', views.browse, name='browse'),
+
+
     path('job_add', views.job_add, name='job_add'),
     path('job/<path:job>', views.job, name="job"),
     path('thumbnail/', views.thumbnail, name="thumbnail"),
-    path('assets/<path:job>', views.assets, name="job"),
+
     path('asset/<path:asset>', views.asset, name='asset')
 ]

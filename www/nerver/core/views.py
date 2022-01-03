@@ -14,20 +14,14 @@ def image(request, path):
     return FileResponse(open(path, 'rb'))
 
 def jobs(request):
-
     job_list = []
     for recent in nerve.Job.GetRecent():
-        data = {}
         Job = nerve.Job(recent)
-        data['path'] = recent
-        data['name'] = nerve.Path(recent).GetHead()
-        data['hasCover'] = Job.HasCover()
-        data['cover'] = Job.GetCover()
-
-        job_list.append(data)
+        job_list.append( Job.JsonEncode() )
 
     context = {'job_list': job_list }
-    return render(request, 'jobs.html', context)
+    response = render(request, 'jobs.html', context)
+    return response
 
 def job_app(request):
     if "ajax" in request.POST.keys():
@@ -48,7 +42,6 @@ def job_app(request):
 def job_add(request):
     if request.method == 'POST':
         if 'job_add' in request.POST:
-            print("JOB_ADD")
             form_add = forms.job_add(request.POST)
             if form_add.is_valid():
                 path = form_add.cleaned_data.get('path')
@@ -85,66 +78,46 @@ def job(request, job):
     return render(request, "job.html", context)
 
 def asset(request, asset):
-    return render(request, "asset.html", {})
+    return HttpRsonse('')
+    #return render(request, "asset.html", {})
 
-def GetAssetData(Asset, details=False):
-    data = {}
-    allformats = nerve.GetFormats()
+def assets(request):
+    job = request.GET['job'] if 'job' in request.GET.keys() else None
 
-    data['exists'] = Asset.Exists()
-    data['name'] = Asset.GetName()
-    data['path'] = Asset.GetPath().AsString()
-    data['file'] = Asset.GetFilePath().AsString()
-    data['format'] = allformats[Asset.GetFormat()]
-    data['hasChildren'] = Asset.HasChildren()
-    #print(Asset.GetChildren())
-    data['hasParent'] = data['path'] == ''
-    data['parent'] = nerve.Path(data['path']).GetParent().AsString()
-    data['versions'] = [ (v, nerve.versionAsString(v)) for v in Asset.GetVersions(fromDisk=True) ]
-
-    data['version'] = Asset.GetVersion()
-    data['versionAsString'] = Asset.GetVersionAsString()
-
-    data['formats'] = []
-
-    if(details):
-        assetData = Asset.GetAssetInfo()
-        data['description'] = assetData['description'] if 'description' in assetData.keys() else ''
-        data['date'] = assetData['date']
-        data['user'] = assetData["user"]
-        for asset_format in Asset.GetFormats():
-            if asset_format in allformats.keys():
-                data['formats'].append( (asset_format,allformats[asset_format]) )
-
-        #data['formats'] = Asset.GetFormats()
-    #nerve.pprint(data)
-
-    return data
-
-def assets(request, job):
     Job = nerve.Job(job)
     if not Job.Exists():
         context = {'msg': 'The job you requested was not found.'}
         return render(request, '404.html', context, status=404)
 
-    path = request.GET['path'] if 'path' in request.GET.keys() else ''
-    version = request.GET['version'] if 'version' in request.GET.keys() else -1
-    format = request.GET['format'] if 'format' in request.GET.keys() else 'usd'
-
-    Asset = nerve.Asset(job=job, path=path, version=version)
-
     context = {}
-    context['job'] = job
-    context['asset'] = {'exists':False }
-    if Asset.Exists():
-        context['asset'] = GetAssetData(Asset, details=True)
+
+    args = request.GET.dict()
+    context['GET'] = args
+    args['version'] = request.GET['version'] if 'version' in request.GET.keys() else -1
+    Asset = nerve.Asset( **args )
+
+    context['job'] = Job.JsonEncode()
+    context['asset'] = Asset.JsonEncode(usd=Asset.Exists())
+    context['asset']['showbackbtn'] = True
 
     context['asset_list'] = []
     for child in Asset.GetChildren():
-        Child = nerve.Asset( job=job, path=Asset.GetPath()+child, version=version )
-        context['asset_list'].append( GetAssetData(Child) )
+        args['path'] = Asset.GetPath() + child
+        Child = nerve.Asset( **args )
+        context['asset_list'].append( Child.JsonEncode()  )
+
+    nerve.String.pprint(context)
 
     return render(request, "assets.html", context)
+
+def asset_add(request):
+    args = request.GET.dict()
+    context = {}
+    context['GET'] = args
+
+    form = forms.asset_add()
+    context['form'] = form
+    return render(request, "asset_add.html", context)
 
 def FileUploadTo(file, path):
     with open(str(path), 'wb+') as dest:
@@ -152,9 +125,9 @@ def FileUploadTo(file, path):
             dest.write(chunk)
 
 def thumbnail(request):
-
     if 'job' not in request.GET.keys():
         return HttpResponseRedirect('/')
+
     job = request.GET['job']
 
     if 'asset' in request.GET.keys():
@@ -164,6 +137,16 @@ def thumbnail(request):
         pass
 
     Job = nerve.Job(job)
-    FileUploadTo(request.FILES['file'], Job.GetCoverPath() )
+    FileUploadTo(request.FILES['file'], Job.GetFilePath('cover') )
 
     return HttpResponse('/')
+
+def browse(request):
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    file_path = filedialog.askopenfilename()
+    root.destroy()
+
+    return HttpResponse(file_path)

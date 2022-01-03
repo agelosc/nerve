@@ -12,6 +12,7 @@
 {% block content %}
 
 	{% include "sidebar.html" %}
+	
 	<div class="container">
 			{% if asset.exists %}
 				<div class="asset p-4 my-5 rounded-lg" style="background-color: #eee;">
@@ -32,13 +33,14 @@
 								<div class="mb-auto p-2 bd-highlight" style="width:100%">
 										<table class="table table-sm table-hover" style="font-size: 0.8rem;">
 											<tbody>
-												<tr><th scope="col">Job</th><th scope="col">{{ job }}</th></tr>
+												<tr><th scope="col">Job</th><th scope="col">{{ job.path }}</th></tr>
 												<tr><th scope="col">Name</th><th scope="col">{{ asset.name }}</th></tr>
 												<tr><th scope="col">Path</th><th scope="col">{{ asset.path }}</th></tr>
 												<tr><th scope="col">Version</th><th scope="col">{{ asset.version }}</th></tr>
-												<tr><th scope="col">Date</th><th scope="col">{{ asset.date }}</th></tr>
-												<tr><th scope="col">User</th><th scope="col">{{ asset.user }}</th></tr>
+												<tr><th scope="col">Date</th><th scope="col">{{ asset.usd.date }}</th></tr>
+												<tr><th scope="col">User</th><th scope="col">{{ asset.usd.user }}</th></tr>
 												<tr><th scope="col">Description</th><th scope="col">{{ asset.description }}</th></tr>
+												<tr><th scope="col">Comments</th><th scope="col">{{ asset.usd.comments }}</th></tr>
 											</tbody>
 										</table>
 								</div>
@@ -67,12 +69,33 @@
 				{% for asset in asset_list %}
 				<div class="grid-item">
 					<div class="item">
-
 						{% include "asset.html" with showbackbtn=True %}
-
 					</div> <!-- item -->
 				</div> <!-- grid-item -->
 				{% endfor %}
+
+				<!-- add asset -->
+				<div class="grid-item">
+					<div class="item">
+						<img class="item-cover" src="{% static '/img/default-cover.jpg' %}" />
+						<div class="overlay" style='opacity:1'>
+						  <div class="item-title">
+								  <a href='/asset_add/?job={{job.path}}&path={{asset.path}}'><h1>+</h1></a>
+							</div>
+							<div class="item-apps row">
+						  <!-- APPS -->
+						  	<div class="col">
+						    <!-- Show backkspace icon -->
+								{% if asset.exists %}
+						      <a href="/assets/?job={{ job.path }}&path={{asset.parent}}">
+						        <i class="bi bi-backspace" style="font-size: 1.5rem;"></i>
+						      </a>
+								{% endif %}
+						  	</div>
+						  </div> <!-- item-apps-->
+
+					</div>
+				</div>
 			</div> <!-- grid -->
 
 
