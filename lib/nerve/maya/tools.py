@@ -5,8 +5,6 @@ import nerve.maya.UI
 reload(nerve.maya.UI)
 
 # Utilities
-
-
 def duplicate():
     return cmds.duplicate(returnRootsOnly=True)
 
@@ -42,7 +40,7 @@ def removeUnknownPlugins():
         print('Removing: {}'.format(up))
         cmds.unknownPlugin(up, remove=True)
 
-    print('Removed {} unknown plugins.'.format(len(unknownPlugins)))
+    print('Removed {} unknown plugins.'.format(len(unknownPlugins))),
 
 def removeTurtle():
     nodes = ['TurtleDefaultBakeLayer', 'TurtleRenderOptions', 'TurtleUIOptions', 'TurtleBakeLayerManager']
@@ -143,6 +141,78 @@ def locatorToAverage():
     cmds.xform(loc, ws=True, t=avg)
     cmds.xform(loc, s=(0.1, 0.1, 0.1))
 
+def snap():
+    sel = cmds.ls(sl=True, l=True)
+    if len(sel) < 2:
+        print('Selection error.'),
+        return False
+
+    pos = cmds.xform(sel[1], q=True, ws=True, t=True)
+    rot = cmds.xform(sel[1], q=True, ws=True, ro=True)
+    sca = cmds.xform(sel[1], q=True, ws=True, s=True)
+
+    cmds.xform(sel[0], ws=True, t=(pos[0], pos[1], pos[2]))
+    cmds.xform(sel[0], ws=True, ro=(rot[0], rot[1], rot[2]))
+    cmds.xform(sel[0], a=True, s=(sca[0], sca[1], sca[2]))
+
+    cmds.select(sel[0], r=True)
+    print('Snapped {} to {}.'.format(sel[0], sel[1])),
+
+def scatter():
+    if not cmds.pluginInfo('MASH', q=True, l=True):
+        cmds.loadPlugin('MASH')
+    name = nerve.maya.UI.Dialog(title='Scatter Name')
+    if not name:
+        return False
+
+    sel = cmds.ls(sl=True, l=True)
+
+    # Distribute Node
+    dist = cmds.createNode('MASH_Distribute', name='{}_distribute'.format(name))
+    # Mash Node
+    mash = cmds.createNode('MASH_Waiter', name='{}_mash'.format(name))
+    cmds.addAttr(mash, longName='instancerMessage', at='message', hidden=True )
+    # Instancer Node
+    inst = cmds.createNode('instancer', name='{}_instancer'.format(name))
+    cmds.addAttr(inst, longName='instancerMessage', at='message', hidden=True )
+    # ID node
+    id = cmds.createNode('MASH_Id', name='{}_ID'.format(name))
+    # Random Node
+    rand = cmds.createNode('MASH_Random', name='{}_random'.format(name))
+    data = {}
+    for attr in ['position', 'rotation', 'scale']:
+        for a in ['X', 'Y', 'Z']:
+            data[attr+a] = 0
+            #cmds.setAttr(rand + '.{}{}'.format(attr, a), 0)
+    data = {'absoluteScale':True, 'uniformRandom':True, 'transformationSpace':2}
+    for key,val in data.items():
+        cmds.setAttr(rand + '.'+key, val)
+
+    # Connect disribute to Mash
+    cmds.connectAttr(dist+'.waiterMessage', mash+'.waiterMessage', f=True)
+    cmds.connectAttr(dist+'.outputPoints', mash+'.inputPoints', f=True)
+
+    # Connect Mash To Instancer
+    cmds.connectAttr(mash+'.instancerMessage', inst+'.instancerMessage', f=True)
+    cmds.connectAttr(mash+'.outputPoints', inst+'.inputPoints', f=True)
+
+    # Connect Selected Objects to Instancer
+    for i in range(len(sel)):
+        cmds.connectAttr(sel[i]+'.matrix', inst+'.inputHierarchy[{}]'.format(i), f=True)
+
+    # Connect Distribute to ID
+    cmds.connectAttr(dist+'.outputPoints', id+'.inputPoints', f=True)
+    # Connect ID to Random
+    cmds.connectAttr(id+'.outputPoints', rand+'.inputPoints', f=True)
+
+    # Connect Random to Mash
+    cmds.connectAttr(rand+'.outputPoints', mash+'.inputPoints', f=True)
+    if len(sel):
+        cmds.setAttr(id+'.numObjects', len(sel))
+
+def scatterUI():
+    nerve.maya.UI.Scatter()
+    
 # Redshift
 def rsRelease():
     if not len(cmds.ls(sl=True)):

@@ -55,6 +55,23 @@ class String:
         pp = pprint.PrettyPrinter()
         pp.pprint(data)
 
+    @staticmethod
+    def FileDialog(mode='dir'):
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        if mode == 'dir':
+            path = filedialog.askdirectory(mustexist=False)
+            root.destroy()
+            return file_path
+
+        if mode == 'file':
+            file_path = filedialog.askopenfilename()
+            root.destroy()
+            return file_path
+
 class Path:
     def __init__(self, path, separator='/'):
         self.separator = separator
@@ -128,6 +145,9 @@ class Path:
             pattern = Path(pattern)
         return [Path(item) for item in sorted(glob(pattern.AsString()))]
 
+    def Replace(self, rep, repwith):
+        return Path(self.AsString().replace(rep, repwith))
+
     # Magic Methods #
     def __repr__(self):
         return self.AsString()
@@ -186,7 +206,7 @@ class Path:
         drivepath = segments[0]
         drivename = segments[0][1]
         segments.pop(0)
-        
+
         if not len(segments):
             return False
         try:
@@ -313,6 +333,10 @@ class Path:
     # Set Methods #
     def SetContent(self, content):
         self.content = content
+
+    def SetHead(self, head):
+        self.segments[-1] = head
+        return self
 
     # OS Methods #
     def Exists(self):
@@ -461,6 +485,7 @@ class Base:
         defaults = {}
         defaults['job'] = os.environ['JOB'] if 'JOB' in os.environ.keys() else Path(conf['JOB'])
         defaults['description'] = ''
+        defaults['comment'] = ''
         self.SetDefaults(defaults, **kwargs)
 
     def SetDefaults(self, defaults, **kwargs):
@@ -539,7 +564,6 @@ class Job(Base):
         if not directory:
             directory = os.environ['JOB'] if 'JOB' in os.environ.keys() else Path(conf['JOB'])
 
-
         self.data['directory'] = Path(directory)
         self.data['job'] = Path(directory)
 
@@ -593,6 +617,13 @@ class Job(Base):
             return []
 
         return conf['local'][key]
+
+    @staticmethod
+    def Get():
+        return os.environ['JOB'] if 'JOB' in os.environ.keys() else nerve.conf['JOB']
+
+    def GetDir(self):
+        return self.data['directory'].AsString()
 
     def GetAssets(self):
         assets = []
@@ -659,6 +690,19 @@ class SublayerBase(Base):
 
     def GetFormat(self):
         return self.data['format']
+
+    def GetFormats(self):
+        from pxr import Usd, Sdf
+
+        if not self.GetFilePath().Exists():
+            return []
+
+        stage = Usd.Stage.Open( self.GetFilePath().AsString() )
+        prim = self.GetPrim(stage)
+        versionSet = prim.GetVariantSet('version')
+        versionSet.SetVariantSelection( self.GetVersionAsString() )
+        formatSet = prim.GetVariantSet('format')
+        return formatSet.GetVariantNames()
 
     def GetLayer(self):
         return Layer(path=self.data['layer'])
@@ -822,7 +866,7 @@ class SublayerBase(Base):
         with versionSet.GetVariantEditContext():
             modelAPI = Usd.ModelAPI(prim)
             data = {}
-            data['comments'] = self.data['comments'] if 'comments' in self.data.keys() else ''
+            data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
             data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
             data['user'] = getpass.getuser()
             modelAPI.SetAssetInfo(data)
@@ -837,6 +881,13 @@ class SublayerBase(Base):
                 data['identifier'] = Sdf.AssetPath(outpath)
                 data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
                 data['user'] = getpass.getuser()
+                if 'frameRange' in self.data.keys() and self.data['frameRange']:
+                    data['frameRange'] = True
+                    data['frameStart'] = self.data['frameRange'][0]
+                    data['frameEnd'] = self.data['frameRange'][1]
+                else:
+                    data['frameRange'] = False
+
                 modelAPI.SetAssetInfo(data)
 
         layer.Save()
@@ -873,6 +924,16 @@ class Asset(SublayerBase):
         outpath = self.GetJobPath() + 'assets'
         outpath+= self.GetPath().GetParent()
         return outpath
+
+    @staticmethod
+    def GetChildrenByFilter(path, jobpath):
+        path = path.replace('//', '/')
+        children = []
+        asset = Asset(job=jobpath)
+        searchpath = asset.GetRootPath().AsString() + path + '*.usda'
+
+        files = Path.Glob( searchpath )
+        return [ f.GetFileName() for f in files ]
 
     def GetChildren(self):
         if self.data['path'] == '':

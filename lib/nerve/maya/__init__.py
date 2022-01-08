@@ -98,28 +98,6 @@ def deferred():
         import UI
         UI.Menu()
 
-def GetFormats(invert=False):
-    data = {}
-    data['usda'] = 'USDAscii'
-    data['usd'] = 'USD'
-    data['abc'] = 'Alembic'
-    data['mb'] = 'MayaBinary'
-    data['ma'] = 'MayaAscii'
-    data['fbx'] = 'FBX'
-    data['obj'] = 'OBJ'
-    data['rs'] = 'RedshiftProxy'
-
-    if invert:
-        return dict( (v,k) for k,v in data.items() )
-
-    return data
-
-def GetFormatObj(format):
-    formats = GetFormats()
-    if format not in formats:
-        raise Exception('Unknown format {}'.format(format))
-    return getattr(sys.modules[__name__], formats[format])
-
 def Release(file, **kwargs):
     file = nerve.Path(file)
 
@@ -127,7 +105,7 @@ def Release(file, **kwargs):
     if not len(sel):
         cmds.warning('Nothing selected. Skipping Release...')
         return False
-    obj = GetFormatObj(file.GetExtension().lower())()
+    obj = Format.GetObject(file.GetExtension().lower())()
 
     if not file.GetParent().Exists():
         file.GetParent().Create()
@@ -135,7 +113,7 @@ def Release(file, **kwargs):
 
 def ReleaseUI(file):
     file = nerve.Path(file)
-    obj = GetFormatObj( file.GetExtension().lower() )()
+    obj = Format.GetObject( file.GetExtension().lower() )()
     result = cmds.layoutDialog(ui=obj.ReleaseUI)
     if result == 'Cancel' or result == 'dismiss':
         return False
@@ -144,7 +122,7 @@ def ReleaseUI(file):
 
 def GatherUI(file):
     file = nerve.Path(file)
-    obj = GetFormatObj( file.GetExtension().lower() )()
+    obj = Format.GetObject( file.GetExtension().lower() )()
     result = cmds.layoutDialog(ui=obj.GatherUI)
     if result == 'Cancel' or result == 'dismiss':
         return False
@@ -157,10 +135,69 @@ def GatherUI(file):
 def Gather(file, mode='reference', **kwargs):
     mode = mode.capitalize()
     file = nerve.Path(file)
-    obj = GetFormatObj( file.GetExtension().lower() )()
+    obj = Format.GetObject( file.GetExtension().lower() )()
     if hasattr(obj, mode):
         getattr(obj, mode)(file, **kwargs)
     print("object attribute \"{}\" does not exist.".format(mode))
+
+class Format:
+    data = {}
+    data['usda'] = 'USDAscii'
+    data['usd'] = 'USD'
+    data['abc'] = 'Alembic'
+    data['mb'] = 'MayaBinary'
+    data['ma'] = 'MayaAscii'
+    data['fbx'] = 'FBX'
+    data['obj'] = 'OBJ'
+    data['rs'] = 'RedshiftProxy'
+
+    @classmethod
+    def GetObject(cls, format):
+        if format not in Format.GetAllShort():
+            raise Exception('Invalid format {}'.format(format))
+        return getattr(sys.modules[__name__], Format.GetLong(format))
+
+    @classmethod
+    def GetAllLong(cls):
+        return [val for key,val in cls.data.items()]
+
+    @classmethod
+    def GetAllShort(cls):
+        return cls.data.keys()
+
+    @classmethod
+    def GetLong(cls, key):
+        if key in cls.data.keys():
+            return cls.data[key]
+        raise Exception('Invalid short format {}'.format(key))
+
+    @classmethod
+    def GetShort(cls, value):
+        for key,val in cls.data.items():
+            if val == value:
+                return key
+
+        raise Exception('Invalid long format {}'.format(value))
+
+class Job(nerve.Job):
+
+    @staticmethod
+    def Set(path):
+        job = nerve.Job(path)
+        if not job.Exists():
+            print('Invalid job path: {}'.format(path)),
+            return False
+
+        proj = nerve.Path( job.GetDir() ) + 'maya'
+        if not proj.Exists():
+            print('Maya project not found {}.'.format(proj)),
+            return False
+
+        os.environ['JOB'] = job.GetDir()
+        cmds.workspace(proj.AsString(), openWorkspace=True)
+        print('Project set to {}.'.format(proj)),
+        return True
+
 
 class Base:
     def __init__(self, **kwargs):

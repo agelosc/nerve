@@ -3,6 +3,7 @@ import nerve
 import sys, os
 print(sys.version)
 print('')
+print('##')
 
 def PathTests():
     # Expand Environmental Variable
@@ -143,6 +144,12 @@ def PathTests():
         p = path + name
         p.Remove()
 
+    assert not files[0].Exists()
+    assert not files[1].Exists()
+    assert not files[2].Exists()
+
+    print('# Passed Path Tests.')
+
 def LayerTests():
     layer = nerve.Layer()
     layer.Create()
@@ -204,18 +211,32 @@ def SublayerTests():
     assert layer.GetSublayers() == ['test']
 
 def AssetTests():
-    asset = nerve.Asset('modelA')
+    # Create test asset modelA
+    asset = nerve.Asset('modelA', version=1)
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
-
     asset.Create()
     assert asset.Exists() is True
-    asset = nerve.Asset('blah/ModelB')
+
+    # Create test asset modelB
+    asset = nerve.Asset('blah/ModelB', version=1)
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
-
     asset.Create()
     assert asset.Exists() is True
+
+    # Create test asset modelC
+    asset = nerve.Asset('ModelC', description='Description!', version=1, frameRange=(1,10), comment='Comment!')
+    layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
+    layer.Save()
+    asset.Create()
+    assert asset.Exists() is True
+
+    #nerve.String.pprint(asset.GetCustomLayerData())
+    #nerve.String.pprint(asset.GetAssetInfo())
+    print(asset.GetFormats())
+
+    print('# Passed Asset tests #')
 
 def LibTests():
     asset = nerve.Asset('modelA')
@@ -257,18 +278,11 @@ PathTests()
 #AssetTests()
 #LayerTests()
 #SublayerTests()
-#AssetTests()
+AssetTests()
 #LibTests()
 #AppTests()
 
-'''
-import tkinter as tk
-from tkinter import filedialog
-root = tk.Tk()
-root.withdraw()
-file_path = filedialog.askopenfilename()
-'''
 
-print('######################')
-print('## All Tests Passed ##')
-print('######################')
+#print('#')
+print('# All Tests Passed.')
+print('##')

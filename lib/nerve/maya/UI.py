@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 import os
-
 from functools import partial
 try:
     from importlib import reload
@@ -7,7 +7,6 @@ except:
     pass
 
 import nerve
-reload(nerve)
 import nerve.maya
 import nerve.maya.utilities as utils
 
@@ -34,75 +33,22 @@ def Dialog(msg='Enter Name:', title='Nerve', unique=[]):
 def ConfirmDialog(msg):
     cmds.confirmDialog( title='Confirm', message=msg, button=['OK'], defaultButton='OK')
 
-def IsStringIllegal(str, extraChars=None):
-    chars = '^<>/{}[]~`'
-    if extraChars is not None:
-        chars+=extraChars
-    for c in chars:
-        if c in str:
-            return True
-    return False
+def FileDialog(fileMode):
+    '''
+    fileMode:
+    0 Any file, whether it exists or not.
+    1 A single existing file.
+    2 The name of a directory. Both directories and files are displayed in the dialog.
+    3 The name of a directory. Only directories are displayed in the dialog.
+    4 Then names of one or more existing files.
+    '''
+    return cmds.fileDialog2(fileMode=3, startingDirectory=cmds.workspace(q=True, rootDirectory=True), dialogStyle=2)
 
-def CreateSequence(*args):
-    result = cmds.promptDialog(title='New Sequence',message='Enter Sequence Name:', button=['OK', 'Cancel'], defaultButton='OK', cancelButton='Cancel', dismissString='Cancel')
-
-    if result == 'OK':
-        text = cmds.promptDialog(query=True, text=True)
-
-        # Illegal Characters
-        if IsStringIllegal(text):
-            cmds.confirmDialog( title='Error', message='Sequence Name contains illegal characters', button=['OK'], defaultButton='OK')
-            return False
-
-        # Name
-        name = text.replace(" ", "_")
-        layer = nerve.Layer(name)
-        if layer.GetFilePath().Exists():
-            cmds.confirmDialog( title='Error', message='Sequence {} already exists.'.format(name), button=['OK'], defaultButton='OK')
-            return False
-
-        layer.Create()
-        print('Sequence '+name+' created...')
-
-        return name
-    return False
-
-def CreateShot(*args):
-    seqname = args[0]
-    result = cmds.promptDialog(title='New Shot',message='Enter Shot Name:', button=['OK', 'Cancel'], defaultButton='OK', cancelButton='Cancel', dismissString='Cancel')
-    if result != 'OK':
-        return False
-
-    text = cmds.promptDialog(query=True, text=True)
-
-    # Illegal Characters
-    if IsStringIllegal(text):
-        cmds.confirmDialog( title='Error', message='Shot Name contains illegal characters', button=['OK'], defaultButton='OK')
-        return False
-
-    # Name
-    name = text.replace(" ", "_").strip('/')
-    frameRange = (cmds.playbackOptions(q=True, min=True), cmds.playbackOptions(q=True, max=True))
-    layer = nerve.Layer(seqname+'/'+name, frameRange=frameRange)
-    if layer.GetFilePath().Exists():
-        cmds.confirmDialog( title='Error', message='Shot {} already exists.'.format(name), button=['OK'], defaultButton='OK')
-        return False
-
-    layer.Create()
-    print('Shot '+name+' created...')
-    return name
-
-class Asset:
-    def __init__(self):
-        self.ctrl = {}
-        self.name = 'Asset'
-        self.width = 600
-        self.height = 600
-
-        self.Release()
-
-    def Release(self):
-        pass
+def uicmd(*args):
+    if len(args)>2:
+        return args[0](*args[1:-1])
+    else:
+        return args[0]()
 
 class Menu:
     def __init__(self):
@@ -114,6 +60,20 @@ class Menu:
 
         gMainWindow = mel.eval('$temp1=$gMainWindow;')
         self.ctrl['mainMenu'] = cmds.menu(self.name, parent=gMainWindow, tearOff=True, label=self.name)
+
+        # Jobs
+        self.ctrl['jobs'] = cmds.menuItem(subMenu=True, label='Jobs', parent=self.ctrl['mainMenu'], tearOff=True)
+        jobs = nerve.Job.GetRecent()
+        for recent in jobs:
+            job = nerve.Job(recent)
+            label = '{0:<20}{1}'.format(job.GetName(), job.GetDir())
+            label=job.GetName()
+            #label = '{:<20} {:<15}'.format(job.GetDir(), job.GetName())
+            cmds.menuItem(subMenu=False, label=label, parent=self.ctrl['jobs'], command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()) )
+
+        cmds.menuItem(divider=True, parent=self.ctrl['jobs'])
+        cmds.menuItem(subMenu=False, label='Add...', parent=self.ctrl['jobs'], command=self.JobAdd)
+        #cmds.menuItem(subMenu=False, label='Create...', parent=self.ctrl['jobs'], command=self.JobCreate)
 
         # Explore
         cmds.menuItem(subMenu=False, label='Explore', parent=self.ctrl['mainMenu'], command=utils.Explore)
@@ -127,17 +87,9 @@ class Menu:
         # Tools
         cmds.menuItem(divider=True, dividerLabel='Tools', parent=self.ctrl['mainMenu'])
         self.Tools()
-        #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Utilities', parent=self.ctrl['mainMenu'])
-        #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Modeling', parent=self.ctrl['mainMenu'])
-        #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Animation', parent=self.ctrl['mainMenu'])
-        #self.ctrl['utils'] = cmds.menuItem(subMenu=True, label='Rigging', parent=self.ctrl['mainMenu'])
-        #self.ctrl['rendering'] = cmds.menuItem(subMenu=True, label='Rendering', parent=self.ctrl['mainMenu'])
-        #cmds.menuItem(subMenu=False, label='Submit To Deadline...', parent=self.ctrl['rendering'], command=utils.deadlineRender)
-        #cmds.menuItem(subMenu=False, label='Local Render...', parent=self.ctrl['rendering'], command=utils.localRender)
 
         cmds.menuItem(divider=True, parent=self.ctrl['mainMenu'])
         cmds.menuItem(subMenu=False, label='Reload Nerve...', parent=self.ctrl['mainMenu'], command=self.reloadNerve)
-
 
         if False:
             cmds.menuItem(divider=True, dividerLabel='Assets', parent=self.ctrl['mainMenu'])
@@ -150,6 +102,29 @@ class Menu:
             cmds.menuItem(subMenu=False, label='Sublayer Gather...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'gather'))
             cmds.menuItem(subMenu=False, label='Sublayer Release...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'release'))
 
+    def JobCreate(self, *args):
+        dir = FileDialog(3)
+        if not dir:
+            return False
+
+    def JobAdd(self, *args):
+        dir = FileDialog(3)
+        if not dir:
+            return False
+
+        dir = dir[0]
+        job = nerve.Job(dir)
+        if not job.Exists():
+            print('Job does not exist or not created with nerve.'),
+            return False
+
+        if dir in nerve.Job.GetRecent():
+            print('Job already in recent jobs.'),
+            return False
+
+        nerve.Job.AddToRecent(dir)
+        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'])
+
     def reloadNerve(self, *args):
         import nerve
         reload(nerve)
@@ -160,12 +135,7 @@ class Menu:
         import nerve.maya.UI
         reload(nerve.maya.UI)
         nerve.maya.UI.Menu()
-
-    def tool(self, *args):
-        if len(args)>2:
-            return args[0](*args[1:])
-        else:
-            return args[0]()
+        print('Nerve Reloaded...'),
 
     def Tools(self):
         import nerve.maya.tools
@@ -183,7 +153,7 @@ class Menu:
             return cmds.menuItem(subMenu=True, label=label, parent=parent, tearOff=True)
 
         def itm(label='', parent=self.ctrl['mainMenu'], cmd=None, args=[]):
-            cmds.menuItem(subMenu=False, label=label, parent=parent, command=partial(self.tool, cmd, *args))
+            cmds.menuItem(subMenu=False, label=label, parent=parent, command=partial(uicmd, cmd, *args))
 
 
         self.ctrl['utils'] = grp('Utilities')
@@ -193,7 +163,11 @@ class Menu:
             itm('Duplicate', parent, nerve.maya.tools.duplicate)
             itm('Instance', parent, nerve.maya.tools.instance)
             itm('Duplicate With Input Graph', parent, nerve.maya.tools.duplicateInputGraph)
+            sep('Scatter', parent)
+            itm('Create Scatter...', parent, nerve.maya.tools.scatter)
+            itm('Scatter UI', parent, nerve.maya.tools.scatterUI)
             sep('Locators', parent)
+            itm('Snap Location', parent, nerve.maya.tools.snap)
             itm('Locator To Pivot', parent, nerve.maya.tools.locatorToPivot)
             itm('Locator To Average', parent, nerve.maya.tools.locatorToAverage)
             sep('References', parent)
@@ -206,29 +180,28 @@ class Menu:
             itm('Remove Unknown Plugins', parent, nerve.maya.tools.removeUnknownPlugins)
             itm('Remove Turtle Plugin', parent, nerve.maya.tools.removeTurtle)
 
-        self.ctrl['redshift'] = grp('Redshift')
-        if True: # Redshift
-            parent = self.ctrl['redshift']
-            itm('Release...', parent, nerve.maya.tools.rsRelease)
-            itm('Gather...', parent, nerve.maya.tools.rsGather)
-            sep('', parent)
-            itm('Lock Proxy History', parent, nerve.maya.tools.lockRsProxyHistory)
-            sep('', parent)
-            itm('Enable Tesselation', parent, nerve.maya.tools.enableRsTesselation)
-            itm('Disable Tesselation', parent, nerve.maya.tools.disableRsTesselation)
-            sep('', parent)
-            itm('Enable Displacement', parent, nerve.maya.tools.enableRsDisplacement)
-            itm('Disable Displacement', parent, nerve.maya.tools.disableRsDisplacement)
-
         self.ctrl['render'] = grp('Rendering')
         if True: # Rendering
+            self.ctrl['redshift'] = grp('Redshift', parent=self.ctrl['render'])
+            if True: # Redshift
+                parent = self.ctrl['redshift']
+                #itm('Release...', parent, nerve.maya.tools.rsRelease)
+                #itm('Gather...', parent, nerve.maya.tools.rsGather)
+                sep('Proxies', parent)
+                itm('Lock Proxy History', parent, nerve.maya.tools.lockRsProxyHistory)
+                sep('Tesselation', parent)
+                itm('Enable Tesselation', parent, nerve.maya.tools.enableRsTesselation)
+                itm('Disable Tesselation', parent, nerve.maya.tools.disableRsTesselation)
+                sep('Displacement', parent)
+                itm('Enable Displacement', parent, nerve.maya.tools.enableRsDisplacement)
+                itm('Disable Displacement', parent, nerve.maya.tools.disableRsDisplacement)
+
             parent = self.ctrl['render']
             sep('Smooth Render', parent)
             itm('Enable Smooth Render', parent, nerve.maya.tools.enableSmoothRender)
             itm('Disable Smooth Render', parent, nerve.maya.tools.disableSmoothRender)
             sep('Render', parent)
             itm('Local Render', parent, nerve.maya.tools.localRender)
-
 
     def Manager(self, *args):
         Manager(args[0], args[1])
@@ -268,6 +241,626 @@ class Menu:
         cmds.playbackOptions(e=True, min=args[0], max=args[1])
 
 class Base:
+    def SetDefaults(self, defaults, **kwargs):
+        for key,val in defaults.items():
+            kwargs[key] = kwargs[key] if key in kwargs.keys() else val
+        return kwargs
+
+    def textField(self, **kwargs):
+        defaults = {}
+        defaults['width'] = self.width - self.col1-15
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.textField(**kwargs)
+
+    def scrollField(self, **kwargs):
+        defaults = {}
+        defaults['width'] = self.width - self.col1-15
+        defaults['height'] = 70
+        defaults['wordWrap'] = True
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.scrollField(**kwargs)
+
+    def iconTextButton(self, **kwargs):
+        defaults = {}
+        defaults['image'] = 'render_swColorPerVertex.png'
+        defaults['backgroundColor'] = (0.22, 0.22, 0.22)
+        defaults['width'] = (self.width - self.col1-15)/2
+        defaults['height'] = defaults['width']
+
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.iconTextButton(**kwargs)
+
+    def textScrollList(self, **kwargs):
+        defaults = {}
+        defaults['height'] = 170
+        defaults['numberOfRows'] = 5
+        defaults['allowMultiSelection'] = False
+
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.textScrollList(**kwargs)
+
+    def text(self, *args, **kwargs):
+        defaults = {}
+        defaults['width'] = self.col1
+        defaults['align'] = 'left'
+
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.text(*args, **kwargs)
+
+    def tabLayout(self, **kwargs):
+        defaults = {}
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.tabLayout(**kwargs)
+
+    def window(self, **kwargs):
+        defaults = {}
+        defaults['title'] = self.name
+        defaults['menuBar'] = False
+        defaults['iconName'] = self.name
+        defaults['sizeable'] = False
+        defaults['toolbox'] = False
+        defaults['maximizeButton'] = False
+        defaults['resizeToFitChildren'] = True
+        defaults['width'] = self.width
+        defaults['height'] = self.height
+
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.window( self.name, **kwargs )
+
+    def separator(self, **kwargs):
+        defaults = {}
+        #defaults['height'] = 15
+        defaults['width'] = self.width-12
+        defaults['style'] = 'in'
+        kwargs = self.SetDefaults(defaults, **kwargs)
+
+        return cmds.separator( **kwargs )
+
+    def frameLayout(self, **kwargs):
+        defaults = {}
+        defaults['marginWidth'] = 4
+
+        kwargs = self.SetDefaults(defaults, **kwargs)
+        return cmds.frameLayout(**kwargs)
+
+class Scatter(Base):
+    def __init__(self):
+        self.data = {}
+        self.ctrl = {}
+
+        self.name = 'scatter'
+        self.width = 340
+        self.height = 600
+        self.col1 = 70
+
+        success = self.init()
+        if success:
+            self.initUI()
+
+    def initUI(self):
+        if cmds.window(self.name, exists=True):
+            cmds.deleteUI(self.name)
+
+        self.ctrl['window'] = self.window()
+        if True:
+            cmds.columnLayout()
+            self.frameLayout(label='Scatter')
+            if True: # MASH node
+                cmds.rowLayout(numberOfColumns=2, height=50)
+                self.text('Mash')
+                self.textField(text=self.data['mash'], editable=False)
+                cmds.setParent('..')
+            cmds.setParent('..')
+
+            if True: # Geometry
+                self.frameLayout(label='Geometry')
+                if True:
+                    cmds.rowLayout(numberOfColumns=3)
+                    self.text('Geometry')
+                    self.ctrl['geo'] = self.textField(text=self.GetGeometry(), editable=False )
+                    self.ctrl['connectgeo'] = cmds.button(label='Connect', command=self.SetGeometry, width=60)
+                    cmds.textField(self.ctrl['geo'], e=True, width= cmds.textField(self.ctrl['geo'], q=True, width=True)-60)
+                    cmds.setParent('..')
+
+                if True:
+                    cmds.rowLayout(numberOfColumns=3)
+                    self.text('')
+                    self.ctrl['calcRotation'] = cmds.checkBox(label='Calculate Rotation', value=cmds.getAttr(self.GetDistNode() + '.calcRotation'), changeCommand=self.calcRotation)
+                    self.ctrl['useUpVector'] = cmds.checkBox(label='Use Up Vector', value=cmds.getAttr(self.GetDistNode() + '.useUpVector'), changeCommand=self.useUpVector)
+                cmds.setParent('..')
+
+            if True: # instances
+                self.frameLayout(label='Instances')
+                if True:
+                    cmds.rowLayout(numberOfColumns=2, rowAttach=(1, 'top', 0))
+                    self.text('Originals')
+                    self.ctrl['instances'] = self.textScrollList(allowMultiSelection=True, append=[cmds.ls(i, l=False)[0] for i in self.GetInstances()], uniqueTag=self.GetInstances())
+                    cmds.setParent('..')
+
+                if True: # Instance Buttons
+                    cmds.rowLayout(numberOfColumns=4)
+                    self.text('')
+                    self.ctrl['instSelect'] = cmds.button(label='Select', width=(self.width - self.col1)/3 - 5, command=self.InstanceSelect)
+                    self.ctrl['instAdd'] = cmds.button(label='Add', width=(self.width - self.col1)/3 - 5, command=self.InstanceAdd)
+                    self.ctrl['instRemove'] = cmds.button(label='Remove', width=(self.width - self.col1)/3 - 5, command=self.InstanceRemove)
+                    cmds.setParent('..')
+
+                if True: # display
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Display')
+
+                    self.ctrl['display'] = cmds.optionMenu(changeCommand=self.display)
+                    for item in ['Geometry', 'Bounding Boxes', 'Bounding Box']:
+                        cmds.menuItem(label=item)
+                    value = cmds.getAttr( self.GetInstancer() + '.levelOfDetail')
+                    cmds.optionMenu(self.ctrl['display'], e=True, select=value+1)
+                    cmds.setParent('..')
+
+                if True: # Point Count
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Point Count')
+                    self.ctrl['pointCount'] = cmds.intSliderGrp( field=True, minValue=0, maxValue=100, fieldMaxValue=100000000, value=cmds.getAttr(self.GetDistNode() + '.pointCount'), changeCommand=self.pointCount, dragCommand=self.pointCount )
+                    cmds.setParent('..')
+
+                if True:
+                    self.frameLayout(label='Variations')
+                    for attr in ['rotationX', 'rotationY', 'rotationZ']:
+                        if True:
+                            cmds.rowLayout(numberOfColumns=2)
+                            self.text(attr.capitalize())
+                            node = self.GetRandNode()
+                            cmd = partial(self.updateFloat, attr, node )
+                            value = cmds.getAttr(node+'.'+attr)
+                            self.ctrl[attr] = cmds.floatSliderGrp( field=True, minValue=0, maxValue=360, value=value, changeCommand=cmd, dragCommand=cmd)
+                            cmds.setParent('..')
+
+                    if True:
+                        cmds.rowLayout(numberOfColumns=2)
+                        self.text('Scale')
+                        node = self.GetRandNode()
+                        cmd = partial(self.updateFloat, 'scaleX', node )
+                        value = cmds.getAttr(node+'.scaleX')
+                        self.ctrl['scaleX'] = cmds.floatSliderGrp( field=True, minValue=0, maxValue=2, fieldMaxValue=10000, value=value, changeCommand=cmd, dragCommand=cmd)
+                        cmds.setParent('..')
+
+
+            cmds.setParent('..')
+
+        cmds.showWindow(self.ctrl['window'])
+        cmds.window(self.name, edit=True, width=self.width, height=self.height)
+
+    def display(self, *args):
+        value = cmds.optionMenu(self.ctrl['display'], q=True, select=True)
+        cmds.setAttr( self.GetInstancer() + '.levelOfDetail', value-1 )
+    def updateFloat(self, *args):
+        attr = args[0]
+        node = args[1]
+        value = cmds.floatSliderGrp(self.ctrl[attr], q=True, value=True)
+        cmds.setAttr(node + '.' + attr, value)
+
+    def calcRotation(self, *args):
+        value = cmds.checkBox(self.ctrl['calcRotation'], q=True, value=True)
+        cmds.setAttr(self.GetDistNode() + '.calcRotation', value )
+
+    def useUpVector(self, *args):
+        value = cmds.checkBox(self.ctrl['useUpVector'], q=True, value=True)
+        cmds.setAttr(self.GetDistNode() + '.useUpVector', value )
+
+    def pointCount(self, *args):
+        cmds.setAttr( self.GetDistNode() + '.pointCount', cmds.intSliderGrp(self.ctrl['pointCount'], q=True, v=True) )
+
+    def InstanceSelect(self, *args):
+        cmds.select(self.GetSelectedInstances(), r=True)
+
+    def InstanceAdd(self, *args):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            print('Nothing selected.'),
+            return False
+
+        instances = self.GetInstances()
+        instancer = self.GetInstancer()
+        for n in sel:
+            if n not in instances:
+                size = cmds.getAttr(instancer + '.inputHierarchy', size=True)
+                cmds.connectAttr(n + '.matrix', instancer + '.inputHierarchy[{}]'.format(size+2), f=True)
+                cmds.textScrollList(self.ctrl['instances'], e=True, append=cmds.ls(n, l=False), uniqueTag=n)
+            else:
+                print('{} is already an instance. Skipping...'.format(n)),
+
+        cmds.setAttr(self.GetIdNode() + '.numObjects', len(self.GetInstances()))
+
+    def InstanceRemove(self, *args):
+        items = self.GetSelectedInstances()
+        instancer = self.GetInstancer()
+        for item in items:
+            plug = cmds.listConnections(item + '.matrix', p=True, type='instancer') or []
+            cmds.disconnectAttr(item + '.matrix', plug[0])
+            cmds.textScrollList(self.ctrl['instances'], e=True, removeItem=cmds.ls(item, l=False)[0])
+
+        cmds.setAttr(self.GetIdNode() + '.numObjects', len(self.GetInstances()))
+
+    def GetGeometry(self):
+        dist = self.GetDistNode()
+        geo = cmds.listConnections( dist + '.inputMesh' ) or []
+        return cmds.ls(geo, l=True)[0] if geo else ''
+
+    def SetGeometry(self, *args):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            print('Nothing selected.'),
+            return False
+
+        mesh = sel[0]
+        if cmds.nodeType(mesh) == 'transform':
+            mesh = cmds.listRelatives(mesh, s=True) or []
+            mesh = mesh[0]
+
+        if cmds.nodeType(mesh) != 'mesh':
+            print('Selection is not a polygon mesh.'),
+            return False
+
+        dist = self.GetDistNode()
+        cmds.setAttr(dist + '.arrangement', 4)
+        cmds.connectAttr(mesh+'.worldMesh', dist + '.inputMesh', f=True)
+
+        cmds.textField(self.ctrl['geo'], e=True, text=self.GetGeometry())
+
+
+    def GetSelectedInstances(self):
+        items = cmds.textScrollList(self.ctrl['instances'], q=True, selectUniqueTagItem=True)
+        return items
+
+    def GetNode(self, type, origin):
+        history = cmds.listHistory(origin, allConnections=True)
+        for h in history:
+            if cmds.nodeType(h) == type:
+                return h
+        return False
+
+    def GetMashNode(self, sel):
+        for n in sel:
+            node = self.GetNode('MASH_Waiter', n)
+            if node:
+                return node
+
+        return False
+
+    def GetInstancer(self):
+        inst = cmds.listConnections(self.data['mash'], type='instancer') or []
+        if not inst:
+            raise Exception('Instancer not found. Scatter setup is corrupted.')
+            return False
+        return inst[0]
+
+    def GetIdNode(self):
+        id = self.GetNode('MASH_Id', self.data['mash'])
+        if not id:
+            raise Exception('MASH_Id not found. Scatter setup is corrupted.')
+            return False
+        return id
+
+    def GetDistNode(self):
+        dist = self.GetNode('MASH_Distribute', self.data['mash'])
+        if not dist:
+            raise Exception('MASH_Distribute not found. Scatter setup is corrupted.')
+            return False
+        return dist
+
+    def GetRandNode(self):
+        rand = self.GetNode('MASH_Random', self.data['mash'])
+        if not rand:
+            raise Exception('MASH_Random not found. Scatter setup is corrupted.')
+            return False
+        return rand
+
+    def GetInstances(self):
+        inst = self.GetInstancer()
+        items = cmds.listConnections(inst + '.inputHierarchy') or []
+        return [ cmds.ls(i, l=True)[0] for i in items ]
+
+    def init(self):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            print('Nothing Selected.'),
+            return False
+
+        mash = self.GetMashNode(sel)
+        if not mash:
+            print('Cannot find MASH node.'),
+            return False
+
+        self.data['mash'] = mash
+
+        return True
+
+
+class Manager(Base):
+    def __init__(self):
+        self.name = 'nerver'
+        self.width = 500
+        self.height = 700
+        self.col1 = 60
+
+        self.data = {}
+        self.ctrl = {}
+
+        if cmds.window(self.name, exists=True):
+            cmds.deleteUI(self.name)
+
+        self.ctrl['window'] = self.window()
+        if True:
+            cmds.columnLayout()
+            if True:
+                self.ctrl['tabs'] = self.tabLayout()
+                if True:
+                    self.ctrl['assets'] = cmds.columnLayout(width=self.width-8)
+                    self.AssetsLayout()
+                    cmds.setParent('..')
+
+                cmds.setParent('..')
+            cmds.setParent('..')
+
+        cmds.tabLayout(self.ctrl['tabs'], e=True, tabLabel=[(self.ctrl['assets'], 'Assets')])
+
+        cmds.showWindow(self.ctrl['window'])
+        cmds.window(self.name, edit=True, width=self.width, height=self.height)
+
+    # Layouts
+    def AssetsLayout(self):
+        cmds.columnLayout()
+
+        self.separator()
+        if True: # Action
+            cmds.rowLayout(numberOfColumns=4, height=50)
+            self.text('Action')
+            self.ctrl['action'] = cmds.radioCollection()
+            width = (self.width - (self.col1*1) )/4
+            cmds.radioButton(label='Release', changeCommand=self.Refresh, select=True, width=width)
+            cmds.radioButton(label='Gather', changeCommand=self.Refresh, width=width)
+            cmds.setParent('..')
+
+        self.separator()
+        if True: # Job
+            cmds.rowLayout(numberOfColumns=3, height=35)
+            self.text('Job')
+            self.ctrl['job'] = self.textField(text=nerve.Job.Get())
+            cmds.text(u'\u25BC', width=30)
+            self.ctrl['recentJobs'] = cmds.popupMenu('test', button=1)
+            cmds.setParent('..')
+
+            for recent in nerve.Job.GetRecent():
+                mi = cmds.menuItem(label=recent, command=partial(uicmd, self.JobSet, recent))
+
+            width = cmds.textField(self.ctrl['job'], q=True, width=True)
+            cmds.textField(self.ctrl['job'], e=True, width=width-35)
+
+        if False: # Action Option Menu
+            cmds.rowLayout(numberOfColumns=2)
+            self.text('Action')
+            self.ctrl['action'] = cmds.optionMenu(changeCommand=self.Refresh)
+            cmds.menuItem('Release')
+            cmds.menuItem('Gather')
+            cmds.setParent('..')
+
+        self.separator()
+        if True: # Path
+            cmds.rowLayout(numberOfColumns=2, height=30)
+            self.text('Path')
+            self.ctrl['path'] = self.textField()
+            cmds.setParent('..')
+
+        if True: # Lists
+            cmds.rowLayout(numberOfColumns=4)
+            #self.text('')
+            self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.RefreshPathList)
+            self.ctrl['versionlist'] = self.textScrollList(width=82, selectCommand=self.Refresh)
+            self.ctrl['formatlist'] = self.textScrollList(width=200, allowMultiSelection=True)
+            cmds.setParent('..')
+        cmds.text('', height=10)
+        self.separator()
+
+        if True: # Asset data
+            textWidth = (self.width - self.col1-20)/2
+            form = cmds.formLayout(numberOfDivisions=100)
+            if True:
+
+                column = cmds.columnLayout()
+                if True: # Description
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Description')
+                    self.ctrl['desc'] = self.textField(text='', width=textWidth)
+                    cmds.setParent('..')
+                if True: # Date
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Date')
+                    self.ctrl['date'] = self.textField(text='', width=textWidth)
+                    cmds.setParent('..')
+                if True: # By
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Owner')
+                    self.ctrl['owner'] = self.textField(text='', width=textWidth)
+                    cmds.setParent('..')
+                if True: # Comments
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Comments')
+                    self.ctrl['comments'] = self.scrollField(text='', width=textWidth)
+                    cmds.setParent('..')
+                cmds.setParent('..')
+
+                self.ctrl['cover'] = self.iconTextButton(width=textWidth)
+            cmds.setParent('..')
+            cmds.formLayout(form, edit=True, attachForm=[(column, 'top', 5), (self.ctrl['cover'], 'right', 5), (self.ctrl['cover'], 'top', 5)])
+        cmds.text('  ', height=10)
+        self.separator()
+        cmds.text(' ', height=5)
+        if True: # button
+            cmds.rowLayout(numberOfColumns=1)
+            self.ctrl['doit'] = cmds.button(label='Release', width=self.width-14, height=50, command=self.ReleaseGather)
+            cmds.setParent('..')
+
+        cmds.setParent('..')
+
+        # Commands
+        for ctrl in ['job', 'path']:
+            cmds.textField(self.ctrl[ctrl], e=True, textChangedCommand=self.Refresh)
+        self.Refresh({})
+
+    # Actions
+    def ReleaseGather(self, *args):
+        args = {}
+        for key in ['path', 'job', 'version']:
+            args[key] = self.GetData(key)
+
+        print(args)
+
+        for format in self.GetData('formats'):
+            args['format'] = nerve.maya.Format.GetShort(format)
+            asset = nerve.Asset(**args)
+            if self.GetData('action'):
+                nerve.maya.ReleaseUI(asset.GetFilePath('session'))
+                asset.Create()
+            else:
+                nerve.maya.GatherUI(asset.GetFilePath('session'))
+
+        self.RefreshPathList({})
+
+    # Refersh
+    def Refresh(self, *args):
+        data = {}
+        for key in ['job', 'path', 'pathlist', 'versionlist', 'formatlist', 'action']:
+            data[key] = self.GetData(key)
+
+        if True: # Action
+            cmds.button(self.ctrl['doit'], e=True, label=data['action'].capitalize())
+            enable = data['action']=='release'
+            color =  (0.17, 0.17, 0.17) if enable else (0.25, 0.25, 0.25)
+            for ctrl in ['desc', 'date', 'owner']:
+                cmds.textField(self.ctrl[ctrl], e=True, enable=enable)
+            cmds.scrollField(self.ctrl['comments'], e=True, backgroundColor=color)
+            cmds.scrollField(self.ctrl['comments'], e=True, editable=enable)
+
+
+        if True: # pathlist
+            children = nerve.Asset.GetChildrenByFilter(data['path'], data['job'])
+            if data['path'] and data['path'] != '/': # add back item
+                children.insert(0, '..')
+
+            # fill children
+            cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True, append=children)
+
+        if True: # versionlist
+            asset = nerve.Asset(job=data['job'], path=data['path'])
+            versions = []
+            if asset.Exists():
+                versions = asset.GetVersionsFromDisk()
+            versions = [ nerve.String.versionAsString(v) for v in versions]
+
+            if data['action'] == 'release':
+                versions.append('<new>')
+
+            cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
+            if len(data['versionlist']) and data['versionlist'][0] in versions:
+                cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=data['versionlist'][0])
+
+        if True: # formatlist
+            allFormats = []
+            assetFormats = []
+
+            if data['versionlist']: # if version is selected
+                version = nerve.String.versionAsInt(data['versionlist'][0]) if data['versionlist'][0] != '<new>' else 0
+                asset = nerve.Asset(job=data['job'], path=data['path'], version=version)
+                assetFormats = [nerve.maya.Format.GetLong(f) for f in asset.GetFormats()]
+
+                if data['action'] == 'release': # if release display all formats
+                    allFormats = nerve.maya.Format.GetAllLong()
+                else: # if gather display only available formats
+                    allFormats = assetFormats
+
+            cmds.textScrollList(self.ctrl['formatlist'], e=True, removeAll=True)
+
+            args = {'edit':True}
+            for i in range(len(allFormats)): # for every available format
+                args['append'] = allFormats[i] # append item
+                if data['action'] == 'release': # if release make available bold and unavailable italics
+                    if allFormats[i] in assetFormats:
+                        args['lineFont'] = [i+1, 'boldLabelFont']
+                    else:
+                        args['lineFont'] = [i+1, 'obliqueLabelFont']
+                else: # if gather make all plain font
+                    args['lineFont'] = [i+1, 'plainLabelFont']
+                cmds.textScrollList(self.ctrl['formatlist'], **args) # append item with font
+
+            # reselect items that exist in updated format list
+            selectItems = []
+            for item in data['formatlist']:
+                if item in allFormats:
+                    selectItems.append(item)
+            if allFormats:
+                cmds.textScrollList(self.ctrl['formatlist'], e=True, selectItem=selectItems)
+
+    def RefreshPathList(self, *args):
+        sel = self.GetData('pathlist')
+        if not sel:
+            return False
+
+        path = self.GetData('path')
+
+        if sel[0] == '..': # if back item selected set path to parent
+            path = nerve.Path(path).GetParent().AsString()
+        else:
+            if path and path[-1] == '/': # if path is set and is root add selected item
+                path+=sel[0]
+            else: # replace path head with selected item
+                path = nerve.Path(path).SetHead(sel[0]).AsString()
+
+        cmds.textField(self.ctrl['path'], e=True, text=path+'/')
+        cmds.textScrollList(self.ctrl['pathlist'], e=True, deselectAll=True)
+
+        self.Refresh({})
+
+    def GetData(self, key):
+        if key not in self.data.keys():
+            if key == 'job':
+                return cmds.textField(self.ctrl['job'], q=True, text=True)
+            if key == 'path':
+                return cmds.textField(self.ctrl['path'], q=True, text=True)
+            if key == 'pathlist':
+                return cmds.textScrollList(self.ctrl['pathlist'], q=True, selectItem=True) or []
+            if key == 'versionlist':
+                return cmds.textScrollList(self.ctrl['versionlist'], q=True, selectItem=True) or []
+            if key == 'formatlist':
+                return cmds.textScrollList(self.ctrl['formatlist'], q=True, selectItem=True) or []
+            if key == 'version':
+                versionAsString = self.GetData('versionlist')
+                if not versionAsString:
+                    return 0
+                if versionAsString[0] == '<new>':
+                    return 0
+                return nerve.String.versionAsInt(versionAsString[0])
+            if key == 'formats':
+                return cmds.textScrollList(self.ctrl['formatlist'], q=True, selectItem=True) or []
+            if False: # Option Menu
+                if key == 'action':
+                    return 'release' if cmds.optionMenu(self.ctrl['action'], q=True, select=True) == 1 else 'gather'
+            if True: # Radio Button
+                if key == 'action':
+                    buttons = cmds.radioCollection(self.ctrl['action'], q=True, collectionItemArray=True)
+                    for button in buttons:
+                        if cmds.radioButton(button, q=True, select=True):
+                            action = cmds.radioButton(button, q=True, label=True).lower()
+                            return action
+
+            raise Exception(key+' not found in data.')
+
+        return self.data[key]
+
+    def JobSet(self, dir):
+        #nerve.maya.Job.Set(dir)
+        cmds.textField(self.ctrl['job'], e=True, text=dir)
+        self.Refresh({})
+
+class BaseOLD:
     def GetWidth(self, div=2):
         return (self.config['width']/div)-self.config['margin']
 
@@ -329,7 +922,7 @@ class Base:
         kwargs = self.SetDefaults(defaults, **kwargs)
         return cmds.window( self.name, **kwargs )
 
-class Manager(Base):
+class ManagerOLD(BaseOLD):
     def __init__(self, tab='Sequences', mode='release', layer=''):
         self.data = {}
         self.ctrl = {}
