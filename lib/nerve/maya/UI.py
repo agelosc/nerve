@@ -13,36 +13,42 @@ import nerve.maya.utilities as utils
 import maya.cmds as cmds
 import maya.mel as mel
 
-def Dialog(msg='Enter Name:', title='Nerve', unique=[]):
-    result = cmds.promptDialog(
-            title=title,
-            message=msg,
-            button=['OK', 'Cancel'],
-            defaultButton='OK',
-            cancelButton='Cancel',
-            dismissString='Cancel')
-    if result == 'OK':
-        input = cmds.promptDialog(query=True, text=True)
-        if input in unique:
-            return Dialog(msg=msg, title='Already Exists', unique=unique)
-        if not input:
-            return False
-        return input
-    return False
 
-def ConfirmDialog(msg):
-    cmds.confirmDialog( title='Confirm', message=msg, button=['OK'], defaultButton='OK')
+class Dialog:
 
-def FileDialog(fileMode):
-    '''
-    fileMode:
-    0 Any file, whether it exists or not.
-    1 A single existing file.
-    2 The name of a directory. Both directories and files are displayed in the dialog.
-    3 The name of a directory. Only directories are displayed in the dialog.
-    4 Then names of one or more existing files.
-    '''
-    return cmds.fileDialog2(fileMode=3, startingDirectory=cmds.workspace(q=True, rootDirectory=True), dialogStyle=2)
+    @staticmethod
+    def Input(msg='Enter Name:', title='Nerve', unique=[]):
+        result = cmds.promptDialog(
+                title=title,
+                message=msg,
+                button=['OK', 'Cancel'],
+                defaultButton='OK',
+                cancelButton='Cancel',
+                dismissString='Cancel')
+        if result == 'OK':
+            input = cmds.promptDialog(query=True, text=True)
+            if input in unique:
+                return Dialog.Input(msg=msg, title='Already Exists', unique=unique)
+            if not input:
+                return False
+            return input
+        return False
+
+    @staticmethod
+    def Confirm(msg):
+        cmds.confirmDialog( title='Confirm', message=msg, button=['OK'], defaultButton='OK')
+
+    @staticmethod
+    def File(fileMode):
+        '''
+        fileMode:
+        0 Any file, whether it exists or not.
+        1 A single existing file.
+        2 The name of a directory. Both directories and files are displayed in the dialog.
+        3 The name of a directory. Only directories are displayed in the dialog.
+        4 Then names of one or more existing files.
+        '''
+        return cmds.fileDialog2(fileMode=3, startingDirectory=cmds.workspace(q=True, rootDirectory=True), dialogStyle=2)
 
 def uicmd(*args):
     if len(args)>2:
@@ -103,12 +109,12 @@ class Menu:
             cmds.menuItem(subMenu=False, label='Sublayer Release...', parent=self.ctrl['mainMenu'], command=partial(self.Manager, 'Sequences', 'release'))
 
     def JobCreate(self, *args):
-        dir = FileDialog(3)
+        dir = Dialog.File(3)
         if not dir:
             return False
 
     def JobAdd(self, *args):
-        dir = FileDialog(3)
+        dir = Dialog.File(3)
         if not dir:
             return False
 
@@ -573,7 +579,6 @@ class Scatter(Base):
         self.data['mash'] = mash
 
         return True
-
 
 class Manager(Base):
     def __init__(self):
@@ -1248,14 +1253,14 @@ class ManagerOLD(BaseOLD):
     def AssetsRelease(self, *args):
         path = self.data['asset1']
         if path == '<new>':
-            result = Dialog('Enter Group', 'Asset Group')
+            result = Dialog.Input('Enter Group', 'Asset Group')
             if not result:
                 return False
             path = result
 
         if self.data['asset2']:
             if self.data['asset2'] == '<new>':
-                result = Dialog('Enter Name', 'Asset Name')
+                result = Dialog.Input('Enter Name', 'Asset Name')
                 if not result:
                     return False
                 path+= '/'+result
@@ -1423,14 +1428,14 @@ class ManagerOLD(BaseOLD):
 
         path = self.data['asset1']
         if path == '<new>':
-            result = Dialog('Enter Group', 'Sublayer Group')
+            result = Dialog.Input('Enter Group', 'Sublayer Group')
             if not result:
                 return False
             path = result
 
         if self.data['asset2']:
             if self.data['asset2'] == '<new>':
-                result = Dialog('Enter Name', 'Sublayer Name')
+                result = Dialog.Input('Enter Name', 'Sublayer Name')
                 if not result:
                     return False
                 path+= '/'+result
@@ -1685,7 +1690,7 @@ class ManagerOLD(BaseOLD):
 
         layer = nerve.Layer( self.data['seq']+'/'+self.data['shot'], frameRange=(startFrame, endFrame), description=description)
         layer.Create()
-        ConfirmDialog('Layer Metadata Updated')
+        Dialog.Confirm('Layer Metadata Updated')
 
     def RefreshTextScrollList(self, ctrl, key, items, highlight=[]):
         prevsel = self.data[key] if key in self.data.keys() else None

@@ -161,7 +161,7 @@ def snap():
 def scatter():
     if not cmds.pluginInfo('MASH', q=True, l=True):
         cmds.loadPlugin('MASH')
-    name = nerve.maya.UI.Dialog(title='Scatter Name')
+    name = nerve.maya.UI.Dialog.Input(title='Scatter Name')
     if not name:
         return False
 
@@ -212,14 +212,14 @@ def scatter():
 
 def scatterUI():
     nerve.maya.UI.Scatter()
-    
+
 # Redshift
 def rsRelease():
     if not len(cmds.ls(sl=True)):
         print('Nothing selected.'),
         return False
 
-    result = nerve.maya.UI.Dialog(msg='Asset Path')
+    result = nerve.maya.UI.Dialog.Input(msg='Asset Path')
     if not result:
         return False
 
@@ -227,7 +227,7 @@ def rsRelease():
     nerve.maya.ReleaseUI(asset.GetFilePath('session'))
 
 def rsGather():
-    result = nerve.maya.UI.Dialog(msg='Asset Path')
+    result = nerve.maya.UI.Dialog.Input(msg='Asset Path')
     if not result:
         return False
 
