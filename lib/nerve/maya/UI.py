@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
-import os
+import os, time, heapq
 from functools import partial
 try:
     from importlib import reload
 except:
     pass
 
+from datetime import datetime, timedelta
+
 import nerve
+import nerve.win
 import nerve.maya
 import nerve.maya.utilities as utils
 
 import maya.cmds as cmds
 import maya.mel as mel
-
 
 class Dialog:
 
@@ -39,7 +41,7 @@ class Dialog:
         cmds.confirmDialog( title='Confirm', message=msg, button=['OK'], defaultButton='OK')
 
     @staticmethod
-    def File(fileMode):
+    def File(fileMode=3):
         '''
         fileMode:
         0 Any file, whether it exists or not.
@@ -48,7 +50,7 @@ class Dialog:
         3 The name of a directory. Only directories are displayed in the dialog.
         4 Then names of one or more existing files.
         '''
-        return cmds.fileDialog2(fileMode=3, startingDirectory=cmds.workspace(q=True, rootDirectory=True), dialogStyle=2)
+        return cmds.fileDialog2(fileMode=fileMode, startingDirectory=cmds.workspace(q=True, rootDirectory=True), dialogStyle=2)
 
 def uicmd(*args):
     if len(args)>2:
@@ -270,11 +272,16 @@ class Base:
         defaults = {}
         defaults['image'] = 'render_swColorPerVertex.png'
         defaults['backgroundColor'] = (0.22, 0.22, 0.22)
+        defaults['style'] = 'iconOnly'
+        defaults['scaleIcon'] = True
         defaults['width'] = (self.width - self.col1-15)/2
+        defaults['marginWidth'] = 0
+        defaults['marginHeight'] = 0
         defaults['height'] = defaults['width']
 
         kwargs = self.SetDefaults(defaults, **kwargs)
         return cmds.iconTextButton(**kwargs)
+        #return cmds.image(image=defaults['image'])
 
     def textScrollList(self, **kwargs):
         defaults = {}
@@ -328,6 +335,391 @@ class Base:
 
         kwargs = self.SetDefaults(defaults, **kwargs)
         return cmds.frameLayout(**kwargs)
+
+class Manager(Base):
+    def __init__(self):
+        import time
+
+        self.name = 'nerver'
+        self.width = 500
+        self.height = 700
+        self.col1 = 60
+
+        self.time = time.time()
+        self.clicks = 0
+
+        self.data = {}
+        self.ctrl = {}
+
+        if cmds.window(self.name, exists=True):
+            cmds.deleteUI(self.name)
+
+        self.ctrl['window'] = self.window()
+        if True:
+            cmds.columnLayout()
+            if True:
+                self.ctrl['tabs'] = self.tabLayout()
+                if True:
+                    self.ctrl['assets'] = cmds.columnLayout(width=self.width-8)
+                    self.AssetsLayout()
+                    cmds.setParent('..')
+
+                cmds.setParent('..')
+            cmds.setParent('..')
+
+        cmds.tabLayout(self.ctrl['tabs'], e=True, tabLabel=[(self.ctrl['assets'], 'Assets')])
+
+        cmds.showWindow(self.ctrl['window'])
+        cmds.window(self.name, edit=True, width=self.width, height=self.height)
+
+    def AssetsLayout(self):
+        cmds.columnLayout()
+
+        self.separator()
+        if True: # Action
+            cmds.rowLayout(numberOfColumns=4, height=50)
+            self.text('Action')
+            self.ctrl['action'] = cmds.radioCollection()
+            width = (self.width - (self.col1*1) )/4
+            cmds.radioButton(label='Release', changeCommand=self.Refresh, select=True, width=width)
+            cmds.radioButton(label='Gather', changeCommand=self.Refresh, width=width)
+            cmds.setParent('..')
+
+        self.separator()
+        if True: # Job
+            cmds.rowLayout(numberOfColumns=3, height=35)
+            self.text('Job')
+            self.ctrl['job'] = self.textField(text=nerve.Job.Get())
+            cmds.text(u'\u25BC', width=30)
+            self.ctrl['recentJobs'] = cmds.popupMenu('test', button=1)
+            cmds.setParent('..')
+
+            for recent in nerve.Job.GetRecent():
+                mi = cmds.menuItem(label=recent, command=partial(uicmd, self.JobSet, recent))
+
+            width = cmds.textField(self.ctrl['job'], q=True, width=True)
+            cmds.textField(self.ctrl['job'], e=True, width=width-35)
+
+        self.separator()
+        if True: # Path
+            cmds.rowLayout(numberOfColumns=2, height=30)
+            self.text('Path')
+            self.ctrl['path'] = self.textField()
+            cmds.setParent('..')
+
+        if True: # Lists
+            cmds.rowLayout(numberOfColumns=4)
+            #self.text('')
+            self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.SelectPath, doubleClickCommand=self.EnterPath)
+            self.ctrl['versionlist'] = self.textScrollList(width=82, selectCommand=self.Refresh)
+            self.ctrl['formatlist'] = self.textScrollList(width=200, allowMultiSelection=True, selectCommand=self.Refresh)
+            cmds.setParent('..')
+        cmds.text('', height=10)
+        self.separator()
+
+        if True: # Asset data
+            textWidth = (self.width - self.col1-20)/2
+            form = cmds.formLayout(numberOfDivisions=100)
+            if True:
+
+                column = cmds.columnLayout()
+                if True: # Description
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Description')
+                    self.ctrl['desc'] = self.textField(text='', width=textWidth)
+                    cmds.setParent('..')
+                if True: # Date
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Date')
+                    self.ctrl['date'] = self.textField(text='', width=textWidth)
+                    cmds.setParent('..')
+                if True: # By
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Owner')
+                    self.ctrl['owner'] = self.textField(text='', width=textWidth)
+                    cmds.setParent('..')
+                if True: # Comments
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Comments')
+                    self.ctrl['comments'] = self.scrollField(text='', width=textWidth)
+                    cmds.setParent('..')
+                cmds.setParent('..')
+
+                right = cmds.columnLayout()
+                if True:
+                    cover = cmds.columnLayout(adj=False, width=textWidth, height=textWidth)
+                    self.ctrl['cover'] = self.iconTextButton(width=textWidth, command=self.ViewCover)
+                    cmds.setParent('..')
+
+                if True:
+                    cmds.rowLayout(numberOfColumns=3)
+                    cmds.button(label='Grab', width=textWidth/3, command=self.GrabCover)
+                    cmds.button(label='Paste', width=textWidth/3, command=self.PasteCover)
+                    cmds.button(label='Select', width=textWidth/3, command=self.SelectCover)
+                    cmds.setParent('..')
+                cmds.setParent('..')
+
+            cmds.setParent('..')
+
+            cmds.formLayout(form, edit=True, attachForm=[(column, 'top', 5), (right, 'right', 5), (right, 'top', 5)])
+
+        cmds.text('  ', height=10)
+        self.separator()
+        cmds.text(' ', height=5)
+        if True: # button
+            cmds.rowLayout(numberOfColumns=1)
+            self.ctrl['doit'] = cmds.button(label='Release', width=self.width-14, height=50, command=self.ReleaseGather)
+            cmds.setParent('..')
+
+        cmds.setParent('..')
+
+        # Commands
+        for ctrl in ['job', 'path']:
+            cmds.textField(self.ctrl[ctrl], e=True, textChangedCommand=self.Refresh)
+        self.Refresh({})
+
+    def ViewCover(self, *args):
+        image = cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
+        if nerve.Path(image).Exists():
+            import os
+            os.startfile(image)
+
+    def GrabCover(self, *args):
+        nerve.win.Screenshot()
+
+    def PasteCover(self, *args):
+        image = nerve.Image.SaveFromClipboard()
+        if not image:
+            print('Image not found in clipboard. Use Grab first.'),
+            return False
+        cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.AsString())
+
+    def SelectCover(self, *args):
+        file = Dialog.File(1)
+        if not file:
+            return False
+
+        file = nerve.Path(file[0])
+
+        extensions = ["jpg", "png", "gif"]
+        if file.GetExtension().lower() in extensions:
+            cmds.iconTextButton(self.ctrl['cover'], e=True, image=file.AsString())
+        else:
+            print('Invalid file type. Skipping...'),
+
+    def Refresh(self, *args):
+        data = {}
+        for key in ['job', 'path', 'pathlist', 'versionlist', 'formatlist', 'action', 'description', 'cover']:
+            data[key] = self.GetData(key)
+
+        if True: # Action
+            cmds.button(self.ctrl['doit'], e=True, label=data['action'].capitalize())
+            enable = data['action']=='release'
+            color =  (0.17, 0.17, 0.17) if enable else (0.25, 0.25, 0.25)
+            for ctrl in ['desc', 'date', 'owner']:
+                cmds.textField(self.ctrl[ctrl], e=True, enable=enable)
+            cmds.scrollField(self.ctrl['comments'], e=True, backgroundColor=color)
+            cmds.scrollField(self.ctrl['comments'], e=True, editable=enable)
+
+        if True: # pathlist
+            if data['path'] and data['path'][-1] == '/':
+                path = data['path']
+            else:
+                path = nerve.Path(data['path']).GetParent().AsString()
+            asset = nerve.Asset(job=data['job'], path=path)
+            #children = nerve.Asset.GetChildrenByFilter(data['path'], data['job'])
+            children = asset.GetChildren()
+            if data['path'] and data['path'] != '/' and '/' in data['path']: # add back item
+                children.insert(0, '..')
+
+            # fill children
+            cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True)
+            c=0
+            for child in children:
+                c+=1
+                cmds.textScrollList(self.ctrl['pathlist'], e=True, append=child)
+                if child == '..':
+                    continue
+
+                casset = nerve.Asset(job=data['job'], path=path + '/'+child)
+                if casset.HasChildren():
+                    cmds.textScrollList(self.ctrl['pathlist'], e=True, lineFont=(c, 'boldLabelFont') )
+
+            #cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True, append=children)
+            if len(data['pathlist']) and data['pathlist'][0] in children:
+                cmds.textScrollList(self.ctrl['pathlist'], e=True, selectItem=data['pathlist'][0])
+
+
+        if True: # versionlist
+            asset = nerve.Asset(job=data['job'], path=data['path'])
+            versions = []
+            if asset.Exists():
+                versions = asset.GetVersionsFromDisk()
+            versions = [ nerve.String.versionAsString(v) for v in versions]
+
+            if data['action'] == 'release':
+                versions.append('<new>')
+
+            cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
+            if len(data['versionlist']) and data['versionlist'][0] in versions:
+                cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=data['versionlist'][0])
+
+        if True: # formatlist
+            allFormats = []
+            assetFormats = []
+
+            if data['versionlist']: # if version is selected
+                version = nerve.String.versionAsInt(data['versionlist'][0]) if data['versionlist'][0] != '<new>' else 0
+                asset = nerve.Asset(job=data['job'], path=data['path'], version=version)
+                assetFormats = [nerve.maya.Format.GetLong(f) for f in asset.GetFormats()]
+
+                if data['action'] == 'release': # if release display all formats
+                    allFormats = nerve.maya.Format.GetAllLong()
+                else: # if gather display only available formats
+                    allFormats = assetFormats
+
+            cmds.textScrollList(self.ctrl['formatlist'], e=True, removeAll=True)
+
+            args = {'edit':True}
+            for i in range(len(allFormats)): # for every available format
+                args['append'] = allFormats[i] # append item
+                if data['action'] == 'release': # if release make available bold and unavailable italics
+                    if allFormats[i] in assetFormats:
+                        args['lineFont'] = [i+1, 'boldLabelFont']
+                    else:
+                        args['lineFont'] = [i+1, 'obliqueLabelFont']
+                else: # if gather make all plain font
+                    args['lineFont'] = [i+1, 'plainLabelFont']
+                cmds.textScrollList(self.ctrl['formatlist'], **args) # append item with font
+
+            # reselect items that exist in updated format list
+            selectItems = []
+            for item in data['formatlist']:
+                if item in allFormats:
+                    selectItems.append(item)
+            if allFormats:
+                cmds.textScrollList(self.ctrl['formatlist'], e=True, selectItem=selectItems)
+
+        if True: # Asset Data
+            fdescription = asset.Exists()
+            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetDescription() if fdescription else '')
+            fcover = asset.Exists() and asset.HasCover()
+            cmds.iconTextButton(self.ctrl['cover'], e=True, image=asset.GetCover() if fcover else 'render_swColorPerVertex.png')
+            #if asset.HasCover():
+                #print(asset.GetCover())
+
+
+        cmds.button(self.ctrl['doit'], e=True, enable=len(selectItems))
+
+    def EnterPath(self):
+        sel = self.GetData('pathlist')
+        if not sel:
+            return False
+
+        path = self.GetData('path')
+        if sel[0] == '..':
+            path = nerve.Path(path).GetParent().AsString() + '/'
+            cmds.textField(self.ctrl['path'], e=True, text=path.lstrip('/'))
+        else:
+            if path:
+                if path[-1] == '/':
+                    cmds.textField(self.ctrl['path'], e=True, text=path+sel[0]+'/')
+                else:
+                    path = nerve.Path(path).SetHead(sel[0]).AsString()
+                    cmds.textField(self.ctrl['path'], e=True, text=path+'/')
+            else:
+                cmds.textField(self.ctrl['path'], e=True, text=sel[0]+'/')
+
+    def SelectPath(self):
+        sel = self.GetData('pathlist')
+        if not sel:
+            return False
+
+        if sel[0] == '..':
+            sel[0] = ''
+
+        path = self.GetData('path')
+        if path:
+            if path[-1] == '/':
+                cmds.textField(self.ctrl['path'], e=True, text=path+sel[0])
+            else:
+                path = nerve.Path(path).SetHead(sel[0]).AsString()
+                cmds.textField(self.ctrl['path'], e=True, text=path)
+        else:
+            cmds.textField(self.ctrl['path'], e=True, text=sel[0])
+
+    def ReleaseGather(self, *args):
+        args = {}
+        for key in ['path', 'job', 'version']:
+            args[key] = self.GetData(key)
+
+        asset = nerve.Asset(**args)
+
+        for format in self.GetData('formats'):
+            asset.SetFormat( nerve.maya.Format.GetShort(format) )
+            if self.GetData('action') == 'release':
+                nerve.maya.ReleaseUI(asset.GetFilePath('session'))
+                asset.Create()
+            else:
+                nerve.maya.GatherUI(asset.GetFilePath('session'))
+
+        if self.GetData('action'):
+            #msg = 'Asset released.\n{}\n{}'.format(args['path'].rstrip('/'), '\n'.join(self.GetData('formats')))
+            msg = 'Asset Released.'
+            Dialog.Confirm(msg)
+
+
+        self.Refresh({})
+
+    def GetData(self, key):
+        if key not in self.data.keys():
+            if key == 'job':
+                return cmds.textField(self.ctrl['job'], q=True, text=True)
+
+            if key == 'path':
+                return cmds.textField(self.ctrl['path'], q=True, text=True)
+
+            if key == 'pathlist':
+                return cmds.textScrollList(self.ctrl['pathlist'], q=True, selectItem=True) or []
+
+            if key == 'versionlist':
+                return cmds.textScrollList(self.ctrl['versionlist'], q=True, selectItem=True) or []
+
+            if key == 'formatlist':
+                return cmds.textScrollList(self.ctrl['formatlist'], q=True, selectItem=True) or []
+
+            if key == 'version':
+                versionAsString = self.GetData('versionlist')
+                if not versionAsString:
+                    return 0
+                if versionAsString[0] == '<new>':
+                    return 0
+                return nerve.String.versionAsInt(versionAsString[0])
+
+            if key == 'formats':
+                return cmds.textScrollList(self.ctrl['formatlist'], q=True, selectItem=True) or []
+
+            if key == 'action':
+                buttons = cmds.radioCollection(self.ctrl['action'], q=True, collectionItemArray=True)
+                for button in buttons:
+                    if cmds.radioButton(button, q=True, select=True):
+                        action = cmds.radioButton(button, q=True, label=True).lower()
+                        return action
+
+            if key == 'description':
+                return cmds.textField(self.ctrl['desc'], q=True, text=True)
+
+            if key == 'cover':
+                return cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
+
+            raise Exception(key+' not found in data.')
+
+        return self.data[key]
+
+    def JobSet(self, dir):
+        #nerve.maya.Job.Set(dir)
+        cmds.textField(self.ctrl['job'], e=True, text=dir)
+        self.Refresh({})
 
 class Scatter(Base):
     def __init__(self):
@@ -438,6 +830,7 @@ class Scatter(Base):
     def display(self, *args):
         value = cmds.optionMenu(self.ctrl['display'], q=True, select=True)
         cmds.setAttr( self.GetInstancer() + '.levelOfDetail', value-1 )
+
     def updateFloat(self, *args):
         attr = args[0]
         node = args[1]
@@ -512,7 +905,6 @@ class Scatter(Base):
 
         cmds.textField(self.ctrl['geo'], e=True, text=self.GetGeometry())
 
-
     def GetSelectedInstances(self):
         items = cmds.textScrollList(self.ctrl['instances'], q=True, selectUniqueTagItem=True)
         return items
@@ -579,291 +971,6 @@ class Scatter(Base):
         self.data['mash'] = mash
 
         return True
-
-class Manager(Base):
-    def __init__(self):
-        self.name = 'nerver'
-        self.width = 500
-        self.height = 700
-        self.col1 = 60
-
-        self.data = {}
-        self.ctrl = {}
-
-        if cmds.window(self.name, exists=True):
-            cmds.deleteUI(self.name)
-
-        self.ctrl['window'] = self.window()
-        if True:
-            cmds.columnLayout()
-            if True:
-                self.ctrl['tabs'] = self.tabLayout()
-                if True:
-                    self.ctrl['assets'] = cmds.columnLayout(width=self.width-8)
-                    self.AssetsLayout()
-                    cmds.setParent('..')
-
-                cmds.setParent('..')
-            cmds.setParent('..')
-
-        cmds.tabLayout(self.ctrl['tabs'], e=True, tabLabel=[(self.ctrl['assets'], 'Assets')])
-
-        cmds.showWindow(self.ctrl['window'])
-        cmds.window(self.name, edit=True, width=self.width, height=self.height)
-
-    # Layouts
-    def AssetsLayout(self):
-        cmds.columnLayout()
-
-        self.separator()
-        if True: # Action
-            cmds.rowLayout(numberOfColumns=4, height=50)
-            self.text('Action')
-            self.ctrl['action'] = cmds.radioCollection()
-            width = (self.width - (self.col1*1) )/4
-            cmds.radioButton(label='Release', changeCommand=self.Refresh, select=True, width=width)
-            cmds.radioButton(label='Gather', changeCommand=self.Refresh, width=width)
-            cmds.setParent('..')
-
-        self.separator()
-        if True: # Job
-            cmds.rowLayout(numberOfColumns=3, height=35)
-            self.text('Job')
-            self.ctrl['job'] = self.textField(text=nerve.Job.Get())
-            cmds.text(u'\u25BC', width=30)
-            self.ctrl['recentJobs'] = cmds.popupMenu('test', button=1)
-            cmds.setParent('..')
-
-            for recent in nerve.Job.GetRecent():
-                mi = cmds.menuItem(label=recent, command=partial(uicmd, self.JobSet, recent))
-
-            width = cmds.textField(self.ctrl['job'], q=True, width=True)
-            cmds.textField(self.ctrl['job'], e=True, width=width-35)
-
-        if False: # Action Option Menu
-            cmds.rowLayout(numberOfColumns=2)
-            self.text('Action')
-            self.ctrl['action'] = cmds.optionMenu(changeCommand=self.Refresh)
-            cmds.menuItem('Release')
-            cmds.menuItem('Gather')
-            cmds.setParent('..')
-
-        self.separator()
-        if True: # Path
-            cmds.rowLayout(numberOfColumns=2, height=30)
-            self.text('Path')
-            self.ctrl['path'] = self.textField()
-            cmds.setParent('..')
-
-        if True: # Lists
-            cmds.rowLayout(numberOfColumns=4)
-            #self.text('')
-            self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.RefreshPathList)
-            self.ctrl['versionlist'] = self.textScrollList(width=82, selectCommand=self.Refresh)
-            self.ctrl['formatlist'] = self.textScrollList(width=200, allowMultiSelection=True)
-            cmds.setParent('..')
-        cmds.text('', height=10)
-        self.separator()
-
-        if True: # Asset data
-            textWidth = (self.width - self.col1-20)/2
-            form = cmds.formLayout(numberOfDivisions=100)
-            if True:
-
-                column = cmds.columnLayout()
-                if True: # Description
-                    cmds.rowLayout(numberOfColumns=2)
-                    self.text('Description')
-                    self.ctrl['desc'] = self.textField(text='', width=textWidth)
-                    cmds.setParent('..')
-                if True: # Date
-                    cmds.rowLayout(numberOfColumns=2)
-                    self.text('Date')
-                    self.ctrl['date'] = self.textField(text='', width=textWidth)
-                    cmds.setParent('..')
-                if True: # By
-                    cmds.rowLayout(numberOfColumns=2)
-                    self.text('Owner')
-                    self.ctrl['owner'] = self.textField(text='', width=textWidth)
-                    cmds.setParent('..')
-                if True: # Comments
-                    cmds.rowLayout(numberOfColumns=2)
-                    self.text('Comments')
-                    self.ctrl['comments'] = self.scrollField(text='', width=textWidth)
-                    cmds.setParent('..')
-                cmds.setParent('..')
-
-                self.ctrl['cover'] = self.iconTextButton(width=textWidth)
-            cmds.setParent('..')
-            cmds.formLayout(form, edit=True, attachForm=[(column, 'top', 5), (self.ctrl['cover'], 'right', 5), (self.ctrl['cover'], 'top', 5)])
-        cmds.text('  ', height=10)
-        self.separator()
-        cmds.text(' ', height=5)
-        if True: # button
-            cmds.rowLayout(numberOfColumns=1)
-            self.ctrl['doit'] = cmds.button(label='Release', width=self.width-14, height=50, command=self.ReleaseGather)
-            cmds.setParent('..')
-
-        cmds.setParent('..')
-
-        # Commands
-        for ctrl in ['job', 'path']:
-            cmds.textField(self.ctrl[ctrl], e=True, textChangedCommand=self.Refresh)
-        self.Refresh({})
-
-    # Actions
-    def ReleaseGather(self, *args):
-        args = {}
-        for key in ['path', 'job', 'version']:
-            args[key] = self.GetData(key)
-
-        print(args)
-
-        for format in self.GetData('formats'):
-            args['format'] = nerve.maya.Format.GetShort(format)
-            asset = nerve.Asset(**args)
-            if self.GetData('action'):
-                nerve.maya.ReleaseUI(asset.GetFilePath('session'))
-                asset.Create()
-            else:
-                nerve.maya.GatherUI(asset.GetFilePath('session'))
-
-        self.RefreshPathList({})
-
-    # Refersh
-    def Refresh(self, *args):
-        data = {}
-        for key in ['job', 'path', 'pathlist', 'versionlist', 'formatlist', 'action']:
-            data[key] = self.GetData(key)
-
-        if True: # Action
-            cmds.button(self.ctrl['doit'], e=True, label=data['action'].capitalize())
-            enable = data['action']=='release'
-            color =  (0.17, 0.17, 0.17) if enable else (0.25, 0.25, 0.25)
-            for ctrl in ['desc', 'date', 'owner']:
-                cmds.textField(self.ctrl[ctrl], e=True, enable=enable)
-            cmds.scrollField(self.ctrl['comments'], e=True, backgroundColor=color)
-            cmds.scrollField(self.ctrl['comments'], e=True, editable=enable)
-
-
-        if True: # pathlist
-            children = nerve.Asset.GetChildrenByFilter(data['path'], data['job'])
-            if data['path'] and data['path'] != '/': # add back item
-                children.insert(0, '..')
-
-            # fill children
-            cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True, append=children)
-
-        if True: # versionlist
-            asset = nerve.Asset(job=data['job'], path=data['path'])
-            versions = []
-            if asset.Exists():
-                versions = asset.GetVersionsFromDisk()
-            versions = [ nerve.String.versionAsString(v) for v in versions]
-
-            if data['action'] == 'release':
-                versions.append('<new>')
-
-            cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
-            if len(data['versionlist']) and data['versionlist'][0] in versions:
-                cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=data['versionlist'][0])
-
-        if True: # formatlist
-            allFormats = []
-            assetFormats = []
-
-            if data['versionlist']: # if version is selected
-                version = nerve.String.versionAsInt(data['versionlist'][0]) if data['versionlist'][0] != '<new>' else 0
-                asset = nerve.Asset(job=data['job'], path=data['path'], version=version)
-                assetFormats = [nerve.maya.Format.GetLong(f) for f in asset.GetFormats()]
-
-                if data['action'] == 'release': # if release display all formats
-                    allFormats = nerve.maya.Format.GetAllLong()
-                else: # if gather display only available formats
-                    allFormats = assetFormats
-
-            cmds.textScrollList(self.ctrl['formatlist'], e=True, removeAll=True)
-
-            args = {'edit':True}
-            for i in range(len(allFormats)): # for every available format
-                args['append'] = allFormats[i] # append item
-                if data['action'] == 'release': # if release make available bold and unavailable italics
-                    if allFormats[i] in assetFormats:
-                        args['lineFont'] = [i+1, 'boldLabelFont']
-                    else:
-                        args['lineFont'] = [i+1, 'obliqueLabelFont']
-                else: # if gather make all plain font
-                    args['lineFont'] = [i+1, 'plainLabelFont']
-                cmds.textScrollList(self.ctrl['formatlist'], **args) # append item with font
-
-            # reselect items that exist in updated format list
-            selectItems = []
-            for item in data['formatlist']:
-                if item in allFormats:
-                    selectItems.append(item)
-            if allFormats:
-                cmds.textScrollList(self.ctrl['formatlist'], e=True, selectItem=selectItems)
-
-    def RefreshPathList(self, *args):
-        sel = self.GetData('pathlist')
-        if not sel:
-            return False
-
-        path = self.GetData('path')
-
-        if sel[0] == '..': # if back item selected set path to parent
-            path = nerve.Path(path).GetParent().AsString()
-        else:
-            if path and path[-1] == '/': # if path is set and is root add selected item
-                path+=sel[0]
-            else: # replace path head with selected item
-                path = nerve.Path(path).SetHead(sel[0]).AsString()
-
-        cmds.textField(self.ctrl['path'], e=True, text=path+'/')
-        cmds.textScrollList(self.ctrl['pathlist'], e=True, deselectAll=True)
-
-        self.Refresh({})
-
-    def GetData(self, key):
-        if key not in self.data.keys():
-            if key == 'job':
-                return cmds.textField(self.ctrl['job'], q=True, text=True)
-            if key == 'path':
-                return cmds.textField(self.ctrl['path'], q=True, text=True)
-            if key == 'pathlist':
-                return cmds.textScrollList(self.ctrl['pathlist'], q=True, selectItem=True) or []
-            if key == 'versionlist':
-                return cmds.textScrollList(self.ctrl['versionlist'], q=True, selectItem=True) or []
-            if key == 'formatlist':
-                return cmds.textScrollList(self.ctrl['formatlist'], q=True, selectItem=True) or []
-            if key == 'version':
-                versionAsString = self.GetData('versionlist')
-                if not versionAsString:
-                    return 0
-                if versionAsString[0] == '<new>':
-                    return 0
-                return nerve.String.versionAsInt(versionAsString[0])
-            if key == 'formats':
-                return cmds.textScrollList(self.ctrl['formatlist'], q=True, selectItem=True) or []
-            if False: # Option Menu
-                if key == 'action':
-                    return 'release' if cmds.optionMenu(self.ctrl['action'], q=True, select=True) == 1 else 'gather'
-            if True: # Radio Button
-                if key == 'action':
-                    buttons = cmds.radioCollection(self.ctrl['action'], q=True, collectionItemArray=True)
-                    for button in buttons:
-                        if cmds.radioButton(button, q=True, select=True):
-                            action = cmds.radioButton(button, q=True, label=True).lower()
-                            return action
-
-            raise Exception(key+' not found in data.')
-
-        return self.data[key]
-
-    def JobSet(self, dir):
-        #nerve.maya.Job.Set(dir)
-        cmds.textField(self.ctrl['job'], e=True, text=dir)
-        self.Refresh({})
 
 class BaseOLD:
     def GetWidth(self, div=2):

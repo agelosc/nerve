@@ -1,6 +1,27 @@
 import os, sys, errno
-import json
+import json, time
 
+
+class Image:
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def SaveFromClipboard():
+        from PySide2.QtWidgets import QApplication
+        image = QApplication.clipboard().image()
+        if not image:
+            return Path('')
+
+        outpath = Path('$TEMP') + 'nerve' + str(time.time()).replace('.', '_')
+        outpath.SetExtension('png')
+
+        image.save( outpath.AsString() )
+
+        if not outpath.Exists():
+            raise Exception('Could not save image: {}.'.format(outpath))
+
+        return outpath
 
 class Node:
     def __init__(self, **kwargs):
@@ -173,6 +194,22 @@ class Path:
             other = Path(other)
         return self.segments != other.segments
 
+    def __bool__(self):
+        if not len(self.segments):
+            return False
+        if len(segments) == 1 and self.segments[0] == '':
+            return False
+
+        return True
+
+    def __len__(self):
+        if not len(self.segments):
+            return 0
+        if len(self.segments) == 1 and self.segments[0] == '':
+            return 0
+
+        return len(self.segments)
+
     # Is Methods #
     def IsAbsolute(self):
         if not len(self.segments):
@@ -338,6 +375,10 @@ class Path:
     def SetHead(self, head):
         self.segments[-1] = head
         return self
+
+    def SetExtension(self, ext):
+        self.isDir = False
+        self.segments[-1]+= '.{}'.format(ext)
 
     # OS Methods #
     def Exists(self):
@@ -547,6 +588,12 @@ class Base:
             layer = USD.OpenAsAnonymous(self.GetFilePath())
         return layer.customLayerData
 
+    def GetDescription(self):
+        data = self.GetCustomLayerData()
+        if 'description' in data.keys():
+            return data['description']
+        return ''
+
     def JsonEncode(self):
         data = self.data
         data['name'] = self.GetName()
@@ -629,7 +676,6 @@ class Job(Base):
     def GetAssets(self):
         assets = []
         files = Path.Glob( self.GetJobPath() + 'assets/*.usda' )
-        print(self.GetJobPath())
 
         for file in files:
             assets.append( file.GetFileName() )
@@ -691,6 +737,10 @@ class SublayerBase(Base):
 
     def GetFormat(self):
         return self.data['format']
+
+    def SetFormat(self, format):
+        self.data['format'] = format
+        self.SetPaths()
 
     def GetFormats(self):
         from pxr import Usd, Sdf
@@ -936,6 +986,9 @@ class Asset(SublayerBase):
         files = Path.Glob( searchpath )
         return [ f.GetFileName() for f in files ]
 
+    def HasChildren(self):
+        return len(self.GetChildren()) > 0
+
     def GetChildren(self):
         if self.data['path'] == '':
             return self.GetJob().GetAssets()
@@ -963,7 +1016,6 @@ class Asset(SublayerBase):
             layer = USD.CreateOrOpen( parent.GetFilePath() )
             relpath = './'+self.GetFilePath().GetRelative(-2).AsString()
             if relpath not in layer.subLayerPaths:
-                print(relpath)
                 layer.subLayerPaths.insert(0, relpath)
             layer.Save()
 

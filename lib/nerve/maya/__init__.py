@@ -111,12 +111,16 @@ def Release(file, **kwargs):
         file.GetParent().Create()
     obj.Export(file, **kwargs)
 
+    print('## NERVE ## asset exported: {}'.format(file))
+
 def ReleaseUI(file):
     file = nerve.Path(file)
-    obj = Format.GetObject( file.GetExtension().lower() )()
-    result = cmds.layoutDialog(ui=obj.ReleaseUI)
-    if result == 'Cancel' or result == 'dismiss':
-        return False
+    ext = file.GetExtension().lower()
+    obj = Format.GetObject( ext )()
+    if hasattr(obj, 'ReleaseUI'):
+        result = cmds.layoutDialog(ui=obj.ReleaseUI, title=Format.GetLong( ext ) )
+        if result == 'Cancel' or result == 'dismiss':
+            return False
 
     Release(file, **obj.data)
 
@@ -142,7 +146,7 @@ def Gather(file, mode='reference', **kwargs):
 
 class Format:
     data = {}
-    data['usda'] = 'USDAscii'
+    #data['usda'] = 'USDAscii'
     data['usd'] = 'USD'
     data['abc'] = 'Alembic'
     data['mb'] = 'MayaBinary'
@@ -159,11 +163,11 @@ class Format:
 
     @classmethod
     def GetAllLong(cls):
-        return [val for key,val in cls.data.items()]
+        return sorted([val for key,val in cls.data.items()])
 
     @classmethod
     def GetAllShort(cls):
-        return cls.data.keys()
+        return sorted(cls.data.keys())
 
     @classmethod
     def GetLong(cls, key):
@@ -197,7 +201,6 @@ class Job(nerve.Job):
         cmds.workspace(proj.AsString(), openWorkspace=True)
         print('Project set to {}.'.format(proj)),
         return True
-
 
 class Base:
     def __init__(self, **kwargs):
@@ -258,7 +261,7 @@ class Base:
             cmds.setParent('..')
         cmds.setParent('..')
 
-    def ReleaseUI(self, anim=True):
+    def _releaseUI(self, anim=True):
         def refresh(*args):
             data = args[0]
             if not data['anim']:
@@ -409,6 +412,9 @@ class Alembic(Base):
         else: # Replace From Import
             cmds.AbcImport(file, mode='replace')
 
+    def ReleaseUI(self):
+        Base._releaseUI(self)
+
 class OBJ(Base):
     def __init__(self, **kwargs):
         Base.__init__(self, **kwargs)
@@ -467,9 +473,6 @@ class OBJ(Base):
 
         cmds.file(file, **args)
         return True
-
-    def ReleaseUI(self):
-        Base.ReleaseUI(self, False)
 
 class Maya(Base):
     def __init__(self, **kwargs):
@@ -689,6 +692,9 @@ class RedshiftProxy(Base):
 
         cmds.setAttr(rsProxy + '.fileName', file, type='string')
 
+    def ReleaseUI(self):
+        Base._releaseUI(self, anim=True)
+
 class USDBase(Base):
     def __init__(self, **kwargs):
         Base.__init__(self, **kwargs)
@@ -798,6 +804,9 @@ class USDBase(Base):
             return cmds.file(file, **args)
         else:
             raise Exception('Selection is not referenced.')
+
+    def ReleaseUI(self):
+        return Base._releaseUI(self, anim=True)
 
 class USDAscii(USDBase):
     def __init__(self, **kwargs):
