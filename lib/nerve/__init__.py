@@ -9,14 +9,28 @@ class Image:
     @staticmethod
     def SaveFromClipboard():
         from PySide2.QtWidgets import QApplication
+        from PySide2.QtGui import QImage
+        from PySide2.QtCore import QRect
+
         image = QApplication.clipboard().image()
         if not image:
             return Path('')
 
+        width = image.width()
+        height = image.height()
+
+        if width != height:
+            if width < height:
+                rect = QRect(0, (height/2)-(width/2), width, width)
+            else:
+                rect = QRect((width/2)-(height/2), 0, height, height)
+
+            image = image.copy(rect)
+
         outpath = Path('$TEMP') + 'nerve' + str(time.time()).replace('.', '_')
         outpath.SetExtension('png')
 
-        image.save( outpath.AsString() )
+        image.save( outpath.AsString(), 'png', 100 )
 
         if not outpath.Exists():
             raise Exception('Could not save image: {}.'.format(outpath))
