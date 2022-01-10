@@ -155,7 +155,6 @@ def ImageTests():
 
     assert image.GetFile() is not None
 
-
     print('# Passed Image tests #')
 
 def LayerTests():
@@ -234,15 +233,14 @@ def AssetTests():
     assert asset.Exists() is True
 
     # Create test asset modelC
-    asset = nerve.Asset('ModelC', description='Description!', version=1, frameRange=(1,10), comment='Comment!')
+    asset = nerve.Asset('ModelC', description='DESC', version=1, frameRange=(1,10), comment='Comment!')
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
     asset.Create()
     assert asset.Exists() is True
 
-    #nerve.String.pprint(asset.GetCustomLayerData())
-    #nerve.String.pprint(asset.GetAssetInfo())
-    print(asset.GetFormats())
+    asset = nerve.Asset('ModelC', version=1)
+    assert asset.GetDescription() == 'DESC'
 
     print('# Passed Asset tests #')
 
@@ -282,12 +280,12 @@ def JobTests():
     assert job.GetAssets() == []
 
 #PathTests()
-ImageTests()
+#ImageTests()
 #JobTests()
 #AssetTests()
 #LayerTests()
 #SublayerTests()
-#AssetTests()
+AssetTests()
 #LibTests()
 #AppTests()
 

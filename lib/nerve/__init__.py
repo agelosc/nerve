@@ -26,11 +26,14 @@ class Image:
         pixmap = screen.grabWindow(0)
         self.image = pixmap.toImage()
 
+    def CleanTemp(self):
+        pass
+
     def GetFile(self):
         if not self.data['file']:
             timestamp = str(time.time()).replace('.', '_')
             self.data['file'] = (Path('$TEMP') + 'nerve' + timestamp).SetExtension('png')
-
+            self.CleanTemp()
 
         return self.data['file']
 
@@ -150,7 +153,7 @@ class String:
 
     @staticmethod
     def versionAsInt(version):
-        if version == '<next>':
+        if version == '<new>':
             return 0
         return int(version[1:])
 
@@ -614,7 +617,6 @@ class Base:
         defaults = {}
         defaults['job'] = os.environ['JOB'] if 'JOB' in os.environ.keys() else Path(conf['JOB'])
         defaults['description'] = ''
-        defaults['comment'] = ''
         self.SetDefaults(defaults, **kwargs)
 
     def SetDefaults(self, defaults, **kwargs):
@@ -662,12 +664,19 @@ class Base:
         if layer is None:
             layer = USD.FindOrOpen(self.GetFilePath())
         data = {}
+        for key in ['path', 'layer', 'description']:
+            if key in self.data.keys():
+                data[key] = self.data[key]
+        layer.customLayerData = data
+
+        '''
         for key,val in self.data.items():
-            if key == 'version':
+            if key not in ['version', 'format', 'filePerFrame']:
                 continue
             if isinstance(val, (str, int, float, bool, dict)):
                 data[key] = val
             layer.customLayerData = data
+            '''
         layer.Save()
 
     def GetCustomLayerData(self, layer=None):
@@ -676,9 +685,13 @@ class Base:
         return layer.customLayerData
 
     def GetDescription(self):
+        if not self.Exists():
+            return ''
+
         data = self.GetCustomLayerData()
         if 'description' in data.keys():
             return data['description']
+
         return ''
 
     def JsonEncode(self):
@@ -829,6 +842,14 @@ class SublayerBase(Base):
         self.data['format'] = format
         self.SetPaths()
 
+    def SetVersion(self, version):
+        if isinstance(version, (str, unicode)):
+            version = String.versionAsInt(version)
+
+        self.data['version'] = version
+        self.SetPaths()
+
+
     def GetFormats(self):
         from pxr import Usd, Sdf
 
@@ -894,7 +915,7 @@ class SublayerBase(Base):
         stage = Usd.Stage.Open( self.GetFilePath().AsString() )
         prim = self.GetPrim(stage)
         versionSet = prim.GetVariantSet('version')
-        return [ versionAsInt(v) for v in versionSet.GetVariantNames() ]
+        return [ String.versionAsInt(v) for v in versionSet.GetVariantNames() ]
 
     def GetVersionsAsString(self, fromDisk=False):
         return [versionAsString(v) for v in self.GetVersions(fromDisk)]
@@ -928,19 +949,38 @@ class SublayerBase(Base):
                 modelAPI.SetAssetInfo(data)
         layer.Save()
 
+    def GetVersionAssetInfo(self):
+        from pxr import Usd, Sdf
+
+        if not self.GetFilePath().Exists():
+            return {}
+
+        stage = Usd.Stage.Open( self.GetFilePath().AsString() )
+        prim = self.GetPrim(stage)
+        versionSet = prim.GetVariantSet('version')
+
+        versionSet.SetVariantSelection( self.GetVersionAsString() )
+
+        with versionSet.GetVariantEditContext():
+            modelAPI = Usd.ModelAPI(prim)
+            return modelAPI.GetAssetInfo()
+
     def GetAssetInfo(self, key=None):
         from pxr import Usd, Sdf
 
         if not self.GetFilePath().Exists():
             return {}
+
         stage = Usd.Stage.Open( self.GetFilePath().AsString() )
         prim = self.GetPrim(stage)
         modelAPI = Usd.ModelAPI(prim)
         versionSet = prim.GetVariantSet('version')
         versionSet.SetVariantSelection( self.GetVersionAsString() )
+
         with versionSet.GetVariantEditContext():
             formatSet = prim.GetVariantSet('format')
             formatSet.SetVariantSelection( self.GetFormat() )
+
             with formatSet.GetVariantEditContext():
                 modelAPI = Usd.ModelAPI(prim)
                 data = modelAPI.GetAssetInfo()
@@ -1002,12 +1042,14 @@ class SublayerBase(Base):
         versionSet.AddVariant( self.GetVersionAsString() )
         versionSet.SetVariantSelection( self.GetVersionAsString() )
         with versionSet.GetVariantEditContext():
+            '''
             modelAPI = Usd.ModelAPI(prim)
             data = {}
             data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
             data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
             data['user'] = getpass.getuser()
             modelAPI.SetAssetInfo(data)
+            '''
 
             formatSet = prim.GetVariantSets().AddVariantSet('format')
             formatSet.AddVariant( self.GetFormat() )
@@ -1015,6 +1057,7 @@ class SublayerBase(Base):
             with formatSet.GetVariantEditContext():
                 modelAPI = Usd.ModelAPI(prim)
                 data = {}
+                data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
                 data['name'] = self.GetFormat()
                 data['identifier'] = Sdf.AssetPath(outpath)
                 data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')

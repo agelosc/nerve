@@ -389,7 +389,7 @@ class Manager(Base):
         if True: # Job
             cmds.rowLayout(numberOfColumns=3, height=35)
             self.text('Job')
-            self.ctrl['job'] = self.textField(text=nerve.Job.Get())
+            self.ctrl['job'] = self.textField(text=nerve.Job.Get(), textChangedCommand=self.Refresh)
             cmds.text(u'\u25BC', width=30)
             self.ctrl['recentJobs'] = cmds.popupMenu('test', button=1)
             cmds.setParent('..')
@@ -404,7 +404,7 @@ class Manager(Base):
         if True: # Path
             cmds.rowLayout(numberOfColumns=2, height=30)
             self.text('Path')
-            self.ctrl['path'] = self.textField()
+            self.ctrl['path'] = self.textField(textChangedCommand=self.Refresh)
             cmds.setParent('..')
 
         if True: # Lists
@@ -426,17 +426,17 @@ class Manager(Base):
                 if True: # Description
                     cmds.rowLayout(numberOfColumns=2)
                     self.text('Description')
-                    self.ctrl['desc'] = self.textField(text='', width=textWidth)
+                    self.ctrl['desc'] = self.textField(text='', width=textWidth, editable=True)
                     cmds.setParent('..')
                 if True: # Date
                     cmds.rowLayout(numberOfColumns=2)
                     self.text('Date')
-                    self.ctrl['date'] = self.textField(text='', width=textWidth)
+                    self.ctrl['date'] = self.textField(text='', width=textWidth, editable=False)
                     cmds.setParent('..')
                 if True: # By
                     cmds.rowLayout(numberOfColumns=2)
-                    self.text('Owner')
-                    self.ctrl['owner'] = self.textField(text='', width=textWidth)
+                    self.text('User')
+                    self.ctrl['user'] = self.textField(text='', width=textWidth, editable=False)
                     cmds.setParent('..')
                 if True: # Comments
                     cmds.rowLayout(numberOfColumns=2)
@@ -448,14 +448,14 @@ class Manager(Base):
                 right = cmds.columnLayout()
                 if True:
                     cover = cmds.columnLayout(adj=False, width=textWidth, height=textWidth)
-                    self.ctrl['cover'] = self.iconTextButton(width=textWidth, command=self.ViewCover)
+                    self.ctrl['cover'] = self.iconTextButton(width=textWidth, command=partial(self.Cover, 'view'))
                     cmds.setParent('..')
 
                 if True:
                     cmds.rowLayout(numberOfColumns=3)
-                    cmds.button(label='Grab', width=textWidth/3, command=self.GrabCover)
-                    cmds.button(label='Paste', width=textWidth/3, command=self.PasteCover)
-                    cmds.button(label='Select', width=textWidth/3, command=self.SelectCover)
+                    cmds.button(label='Grab', width=textWidth/3, command=partial(self.Cover, 'grab'))
+                    cmds.button(label='Paste', width=textWidth/3,  command=partial(self.Cover, 'paste'))
+                    cmds.button(label='Select', width=textWidth/3,  command=partial(self.Cover, 'select'))
                     cmds.setParent('..')
                 cmds.setParent('..')
 
@@ -473,105 +473,129 @@ class Manager(Base):
 
         cmds.setParent('..')
 
-        # Commands
-        for ctrl in ['job', 'path']:
-            cmds.textField(self.ctrl[ctrl], e=True, textChangedCommand=self.Refresh)
         self.Refresh({})
 
-    def ViewCover(self, *args):
-        imagepath = cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
-        if nerve.Path(imagepath).Exists():
-            image = nerve.Image(imagepath)
-            image.Open()
+    def Cover(self, *args):
+        action = args[0]
 
-    def GrabCover(self, *args):
-        nerve.win.Screenshot()
+        if action == 'view':
+            imagepath = cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
+            if nerve.Path(imagepath).Exists():
+                image = nerve.Image(imagepath)
+                image.Open()
+            return True
 
-    def PasteCover(self, *args):
-        image = nerve.Image()
-        image.Clipboard()
-        if not image:
-            print('Image not found in clipboard. Use Grab first.'),
-            return False
+        if action == 'grab':
+            nerve.win.Screenshot()
+            return True
 
-        image.Square()
-        image.Save()
+        if action == 'paste':
+            image = nerve.Image()
+            image.Clipboard()
+            if not image:
+                print('Image not found in clipboard. Use Grab first.'),
+                return False
 
-        cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
-
-    def SelectCover(self, *args):
-        file = Dialog.File(1)
-        if not file:
-            return False
-
-        file = nerve.Path(file[0])
-        extensions = ["jpg", "png", "gif"]
-        if file.GetExtension().lower() in extensions:
-            image = nerve.Image( file )
             image.Square()
             image.Save()
+
             cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
-        else:
-            print('Invalid file type. Skipping...'),
+            return True
+
+        if action == 'select':
+            file = Dialog.File(1)
+            if not file:
+                return False
+
+            file = nerve.Path(file[0])
+            extensions = ["jpg", "png", "gif"]
+            if file.GetExtension().lower() in extensions:
+                image = nerve.Image( file )
+                image.Square()
+                image.Save()
+                cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
+            else:
+                print('Invalid file type. Skipping...'),
+            return True
 
     def Refresh(self, *args):
         data = {}
         for key in ['job', 'path', 'pathlist', 'versionlist', 'formatlist', 'action', 'description', 'cover']:
             data[key] = self.GetData(key)
 
-        if True: # Action
+        if True: # ACTION
             cmds.button(self.ctrl['doit'], e=True, label=data['action'].capitalize())
-            enable = data['action']=='release'
-            color =  (0.17, 0.17, 0.17) if enable else (0.25, 0.25, 0.25)
-            for ctrl in ['desc', 'date', 'owner']:
-                cmds.textField(self.ctrl[ctrl], e=True, enable=enable)
-            cmds.scrollField(self.ctrl['comments'], e=True, backgroundColor=color)
-            cmds.scrollField(self.ctrl['comments'], e=True, editable=enable)
 
-        if True: # pathlist
-            if data['path'] and data['path'][-1] == '/':
-                path = data['path']
+            if data['action'] == 'release':
+                cmds.textField(self.ctrl['desc'], e=True, enable=True)
+                cmds.scrollField(self.ctrl['comments'], e=True, editable=True, backgroundColor=(0.17, 0.17, 0.17))
             else:
+                cmds.textField(self.ctrl['desc'], e=True, enable=False)
+                cmds.scrollField(self.ctrl['comments'], e=True, editable=False, backgroundColor=(0.25, 0.25, 0.25))
+
+        if True: # PATHLIST
+            if data['path'] and data['path'][-1] == '/': # path is set and does not end in /
+                path = data['path']
+            else: # get parent path
                 path = nerve.Path(data['path']).GetParent().AsString()
-            asset = nerve.Asset(job=data['job'], path=path)
-            #children = nerve.Asset.GetChildrenByFilter(data['path'], data['job'])
-            children = asset.GetChildren()
-            if data['path'] and data['path'] != '/' and '/' in data['path']: # add back item
+
+            args = {}
+            args['job'] = data['job']
+            args['path'] = path
+            asset = nerve.Asset(**args)
+
+            # Children
+            if '*' in self.GetData('path'): # Get Children with Wildcard
+                children = asset.GetChildrenByFilter(self.GetData('path').replace('*', ''), data['job'])
+            else: # Get all children
+                children = asset.GetChildren()
+
+            # Add level up
+            if data['path'] and data['path'] != '/' and '/' in data['path'][1:]: # data is set and is not / and is not at root level
                 children.insert(0, '..')
 
-            # fill children
+            # Empty List
             cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True)
+
             c=0
             for child in children:
                 c+=1
                 cmds.textScrollList(self.ctrl['pathlist'], e=True, append=child)
-                if child == '..':
-                    continue
-
-                casset = nerve.Asset(job=data['job'], path=path + '/'+child)
-                if casset.HasChildren():
+                # make parent asset bold
+                if child != '..' and nerve.Asset( job=data['job'], path=path+'/'+child).HasChildren():
                     cmds.textScrollList(self.ctrl['pathlist'], e=True, lineFont=(c, 'boldLabelFont') )
 
-            #cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True, append=children)
+            # Reselect
             if len(data['pathlist']) and data['pathlist'][0] in children:
                 cmds.textScrollList(self.ctrl['pathlist'], e=True, selectItem=data['pathlist'][0])
 
+            # Description
+            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetDescription() if asset.Exists() else data['description'])
 
-        if True: # versionlist
-            asset = nerve.Asset(job=data['job'], path=data['path'])
+        if True: # VERSIONLIST
+            args['path'] = data['path']
+            asset = nerve.Asset(**args)
+
+            # Get Versions
             versions = []
             if asset.Exists():
-                versions = asset.GetVersionsFromDisk()
+                versions = asset.GetVersions()
             versions = [ nerve.String.versionAsString(v) for v in versions]
 
+            # add new version item
             if data['action'] == 'release':
                 versions.append('<new>')
+
+            # Clear Asset Info
+            for key in ['date','user']:
+                cmds.textField(self.ctrl[key], e=True, text='')
+            cmds.scrollField(self.cltr['desc'], e=True, text='')
 
             cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
             if len(data['versionlist']) and data['versionlist'][0] in versions:
                 cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=data['versionlist'][0])
 
-        if True: # formatlist
+        if True: # FORMATLIST
             allFormats = []
             assetFormats = []
 
@@ -607,16 +631,21 @@ class Manager(Base):
             if allFormats:
                 cmds.textScrollList(self.ctrl['formatlist'], e=True, selectItem=selectItems)
 
-        if True: # Asset Data
-            fdescription = asset.Exists()
-            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetDescription() if fdescription else '')
+        if False: # Asset Data
+            if data['versionlist'][0] != '<new>':
+                asset.SetVersion( data['versionlist'][0] )
+                assetInfo = asset.GetVersionAssetInfo()
+                cmds.textField(self.ctrl['date'], e=True, text=assetInfo['date'])
+                cmds.textField(self.ctrl['user'], e=True, text=assetInfo['user'])
+                cmds.scrollField(self.ctrl['comments'], e=True, text=assetInfo['comments'])
+
             fcover = asset.Exists() and asset.HasCover()
             cmds.iconTextButton(self.ctrl['cover'], e=True, image=asset.GetCover() if fcover else 'render_swColorPerVertex.png')
             #if asset.HasCover():
                 #print(asset.GetCover())
 
-
-        cmds.button(self.ctrl['doit'], e=True, enable=len(selectItems))
+        if True: # Button
+            cmds.button(self.ctrl['doit'], e=True, enable=len(selectItems))
 
     def EnterPath(self):
         sel = self.GetData('pathlist')
@@ -657,13 +686,13 @@ class Manager(Base):
 
     def ReleaseGather(self, *args):
         args = {}
-        for key in ['path', 'job', 'version']:
+        for key in ['path', 'job', 'version', 'description']:
             args[key] = self.GetData(key)
-
         asset = nerve.Asset(**args)
 
         for format in self.GetData('formats'):
             asset.SetFormat( nerve.maya.Format.GetShort(format) )
+
             if self.GetData('action') == 'release':
                 nerve.maya.ReleaseUI(asset.GetFilePath('session'))
                 asset.Create()
@@ -718,6 +747,9 @@ class Manager(Base):
 
             if key == 'cover':
                 return cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
+
+            if key == 'comments':
+                cmds.scrollField(self.ctrl['comments'], q=True, text=True)
 
             raise Exception(key+' not found in data.')
 
