@@ -1,10 +1,79 @@
 import os, sys, errno
 import json, time
 
+from PySide2.QtGui import QImage
 
 class Image:
-    def __init__(self):
-        pass
+    def __init__(self, filename=None):
+        if filename:
+            self.image = QImage(str(filename))
+        else:
+            self.image = QImage()
+
+        self.data = {}
+        self.data['file'] = Path(filename)
+
+    def Clipboard(self):
+        from PySide2.QtWidgets import QApplication
+
+        self.image = QApplication.clipboard().image()
+        self.data['file'] = None
+
+    def Screenshot(self):
+        #https://stackoverflow.com/questions/46773165/pyqt5-grab-and-save-section-of-screen
+        from PySide2.QtGui import QScreen, QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        pixmap = screen.grabWindow(0)
+        self.image = pixmap.toImage()
+
+    def GetFile(self):
+        if not self.data['file']:
+            timestamp = str(time.time()).replace('.', '_')
+            self.data['file'] = (Path('$TEMP') + 'nerve' + timestamp).SetExtension('png')
+
+
+        return self.data['file']
+
+    def GetExtension(self):
+        return self.GetFile().GetExtension()
+
+    def Square(self):
+        from PySide2.QtCore import QRect
+
+        width = self.image.width()
+        height = self.image.height()
+
+        if width != height:
+            if width < height:
+                rect = QRect(0, (height/2)-(width/2), width, width)
+            else:
+                rect = QRect((width/2)-(height/2), 0, height, height)
+            self.image = self.image.copy(rect)
+
+    def Save(self):
+        self.image.save( self.GetFile().AsString(), self.GetExtension(), 100 )
+        if not self.GetFile().Exists():
+            raise Exception('Could not save image: {}'.format( self.GetFile() ))
+
+    def Open(self):
+        if not self.GetFile().Exists():
+            raise Exception('File does not exist: {}.'.format(self.GetFile()))
+        os.startfile(self.GetFile().AsString())
+
+    def __str__(self):
+        return self.GetFile().AsString()
+
+    def __repr__(self):
+        return str(self)
+
+    def bool(self):
+        return not self.image.isNull()
+
+    def __bool__(self):
+        return self.bool()
+
+    def __nonzero__(self):
+        return self.bool()
 
     @staticmethod
     def SaveFromClipboard():
@@ -109,11 +178,14 @@ class String:
             return file_path
 
 class Path:
-    def __init__(self, path, separator='/'):
+    def __init__(self, path=None, separator='/'):
         self.separator = separator
         self.segments = []
         self.content = None
         self.isDir = True
+
+        if path is None:
+            return None
 
         if isinstance(path, Path):
             path = path.AsString(separator)
@@ -211,7 +283,7 @@ class Path:
     def __bool__(self):
         if not len(self.segments):
             return False
-        if len(segments) == 1 and self.segments[0] == '':
+        if len(self.segments) == 1 and self.segments[0] == '':
             return False
 
         return True
@@ -393,6 +465,7 @@ class Path:
     def SetExtension(self, ext):
         self.isDir = False
         self.segments[-1]+= '.{}'.format(ext)
+        return self
 
     # OS Methods #
     def Exists(self):

@@ -479,20 +479,25 @@ class Manager(Base):
         self.Refresh({})
 
     def ViewCover(self, *args):
-        image = cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
-        if nerve.Path(image).Exists():
-            import os
-            os.startfile(image)
+        imagepath = cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
+        if nerve.Path(imagepath).Exists():
+            image = nerve.Image(imagepath)
+            image.Open()
 
     def GrabCover(self, *args):
         nerve.win.Screenshot()
 
     def PasteCover(self, *args):
-        image = nerve.Image.SaveFromClipboard()
+        image = nerve.Image()
+        image.Clipboard()
         if not image:
             print('Image not found in clipboard. Use Grab first.'),
             return False
-        cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.AsString())
+
+        image.Square()
+        image.Save()
+
+        cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
 
     def SelectCover(self, *args):
         file = Dialog.File(1)
@@ -500,10 +505,12 @@ class Manager(Base):
             return False
 
         file = nerve.Path(file[0])
-
         extensions = ["jpg", "png", "gif"]
         if file.GetExtension().lower() in extensions:
-            cmds.iconTextButton(self.ctrl['cover'], e=True, image=file.AsString())
+            image = nerve.Image( file )
+            image.Square()
+            image.Save()
+            cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
         else:
             print('Invalid file type. Skipping...'),
 

@@ -150,6 +150,14 @@ def PathTests():
 
     print('# Passed Path Tests.')
 
+def ImageTests():
+    image = nerve.Image()
+
+    assert image.GetFile() is not None
+
+
+    print('# Passed Image tests #')
+
 def LayerTests():
     layer = nerve.Layer()
     layer.Create()
@@ -273,12 +281,13 @@ def JobTests():
 
     assert job.GetAssets() == []
 
-PathTests()
+#PathTests()
+ImageTests()
 #JobTests()
 #AssetTests()
 #LayerTests()
 #SublayerTests()
-AssetTests()
+#AssetTests()
 #LibTests()
 #AppTests()
 
