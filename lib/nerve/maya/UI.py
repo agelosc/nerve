@@ -270,7 +270,7 @@ class Base:
 
     def iconTextButton(self, **kwargs):
         defaults = {}
-        defaults['image'] = 'render_swColorPerVertex.png'
+        #defaults['image'] = 'render_swColorPerVertex.png'
         defaults['backgroundColor'] = (0.22, 0.22, 0.22)
         defaults['style'] = 'iconOnly'
         defaults['scaleIcon'] = True
@@ -344,6 +344,7 @@ class Manager(Base):
         self.width = 500
         self.height = 700
         self.col1 = 60
+        self.cover = 'render_swColorPerVertex.png'
 
         self.time = time.time()
         self.clicks = 0
@@ -438,17 +439,22 @@ class Manager(Base):
                     self.text('User')
                     self.ctrl['user'] = self.textField(text='', width=textWidth, editable=False)
                     cmds.setParent('..')
+                if True:
+                    cmds.rowLayout(numberOfColumns=2)
+                    self.text('Latest')
+                    self.ctrl['latest'] = self.textField(text='', width=textWidth, editable=False)
+                    cmds.setParent('..')
                 if True: # Comments
                     cmds.rowLayout(numberOfColumns=2)
-                    self.text('Comments')
-                    self.ctrl['comments'] = self.scrollField(text='', width=textWidth)
+                    self.text('Comment')
+                    self.ctrl['comment'] = self.scrollField(text='', width=textWidth)
                     cmds.setParent('..')
                 cmds.setParent('..')
 
                 right = cmds.columnLayout()
                 if True:
                     cover = cmds.columnLayout(adj=False, width=textWidth, height=textWidth)
-                    self.ctrl['cover'] = self.iconTextButton(width=textWidth, command=partial(self.Cover, 'view'))
+                    self.ctrl['cover'] = self.iconTextButton(width=textWidth, image=self.cover, command=partial(self.Cover, 'view'))
                     cmds.setParent('..')
 
                 if True:
@@ -523,129 +529,182 @@ class Manager(Base):
         for key in ['job', 'path', 'pathlist', 'versionlist', 'formatlist', 'action', 'description', 'cover']:
             data[key] = self.GetData(key)
 
-        if True: # ACTION
-            cmds.button(self.ctrl['doit'], e=True, label=data['action'].capitalize())
+        self.Refresh_action()
+        self.Refresh_pathlist()
+        self.Refresh_versionlist()
+        self.Refresh_formatlist()
+        self.Refresh_assetinfo()
+        self.Refresh_button()
 
-            if data['action'] == 'release':
-                cmds.textField(self.ctrl['desc'], e=True, enable=True)
-                cmds.scrollField(self.ctrl['comments'], e=True, editable=True, backgroundColor=(0.17, 0.17, 0.17))
-            else:
-                cmds.textField(self.ctrl['desc'], e=True, enable=False)
-                cmds.scrollField(self.ctrl['comments'], e=True, editable=False, backgroundColor=(0.25, 0.25, 0.25))
+    def Refresh_button(self):
+        formatlist = self.GetData('formatlist')
+        action = self.GetData('action')
 
-        if True: # PATHLIST
-            if data['path'] and data['path'][-1] == '/': # path is set and does not end in /
-                path = data['path']
-            else: # get parent path
-                path = nerve.Path(data['path']).GetParent().AsString()
+        cmds.button(self.ctrl['doit'], e=True, enable=len(formatlist)>0)
+        cmds.button(self.ctrl['doit'], e=True, label=action.capitalize())
 
-            args = {}
-            args['job'] = data['job']
-            args['path'] = path
-            asset = nerve.Asset(**args)
+    def Refresh_assetinfo(self):
+        path = self.GetData('path')
+        versionlist = self.GetData('versionlist')
+        formatlist = self.GetData('formatlist')
 
-            # Children
-            if '*' in self.GetData('path'): # Get Children with Wildcard
-                children = asset.GetChildrenByFilter(self.GetData('path').replace('*', ''), data['job'])
-            else: # Get all children
-                children = asset.GetChildren()
+        # Clear
+        for key in ['desc', 'date', 'user', 'latest']:
+            cmds.textField(self.ctrl[key], e=True, text='')
+        cmds.scrollField(self.ctrl['comment'], e=True, text='')
+        cmds.iconTextButton(self.ctrl['cover'], e=True, image=self.cover)
 
-            # Add level up
-            if data['path'] and data['path'] != '/' and '/' in data['path'][1:]: # data is set and is not / and is not at root level
-                children.insert(0, '..')
+        args = {}
+        args['job'] = self.GetData('job')
+        args['path'] = self.GetData('path')
+        asset = nerve.Asset(**args)
+        if asset.Exists():
+            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetDescription())
+        if asset.HasCover():
+            cmds.iconTextButton(self.ctrl['cover'], e=True, image=asset.GetCover())
 
-            # Empty List
-            cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True)
+        if not len(versionlist) or versionlist[0] == '<new>': # return if version is not selected or new
+            return False
 
-            c=0
-            for child in children:
-                c+=1
-                cmds.textScrollList(self.ctrl['pathlist'], e=True, append=child)
-                # make parent asset bold
-                if child != '..' and nerve.Asset( job=data['job'], path=path+'/'+child).HasChildren():
-                    cmds.textScrollList(self.ctrl['pathlist'], e=True, lineFont=(c, 'boldLabelFont') )
+        args = {}
+        args['job'] = self.GetData('job')
+        args['path'] = self.GetData('path')
+        args['version'] = nerve.String.versionAsInt(versionlist[0])
+        asset = nerve.Asset(**args)
 
-            # Reselect
-            if len(data['pathlist']) and data['pathlist'][0] in children:
-                cmds.textScrollList(self.ctrl['pathlist'], e=True, selectItem=data['pathlist'][0])
+        latestFormat = asset.GetLatestFormat()
+        cmds.textField(self.ctrl['latest'], e=True, text= nerve.maya.Format.GetLong( latestFormat ))
 
-            # Description
-            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetDescription() if asset.Exists() else data['description'])
+        # Selected Formats
+        if not len(formatlist):
+            return False
 
-        if True: # VERSIONLIST
-            args['path'] = data['path']
-            asset = nerve.Asset(**args)
+        format = latestFormat
+        formats_all = asset.GetFormats()
 
-            # Get Versions
-            versions = []
-            if asset.Exists():
-                versions = asset.GetVersions()
-            versions = [ nerve.String.versionAsString(v) for v in versions]
+        for f in [nerve.maya.Format.GetShort(f) for f in formatlist]:
+            if f in formats_all:
+                format = f
+                break
+        asset.SetFormat(format)
 
-            # add new version item
-            if data['action'] == 'release':
-                versions.append('<new>')
+        # Get default/latest format variant assetInfo if format not selected, last selected format otherwise
+        assetInfo = asset.GetAssetInfo()
+        cmds.textField(self.ctrl['date'], e=True, text=assetInfo['date'])
+        cmds.textField(self.ctrl['user'], e=True, text=assetInfo['user'])
+        cmds.scrollField(self.ctrl['comment'], e=True, text=assetInfo['comment'] if 'comment' in assetInfo.keys() else '')
 
-            # Clear Asset Info
-            for key in ['date','user']:
-                cmds.textField(self.ctrl[key], e=True, text='')
-            cmds.scrollField(self.cltr['desc'], e=True, text='')
 
-            cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
-            if len(data['versionlist']) and data['versionlist'][0] in versions:
-                cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=data['versionlist'][0])
+    def Refresh_formatlist(self):
+        formatlist = self.GetData('formatlist')
+        versionlist = self.GetData('versionlist')
 
-        if True: # FORMATLIST
-            allFormats = []
-            assetFormats = []
+        cmds.textScrollList(self.ctrl['formatlist'], e=True, removeAll=True)
 
-            if data['versionlist']: # if version is selected
-                version = nerve.String.versionAsInt(data['versionlist'][0]) if data['versionlist'][0] != '<new>' else 0
-                asset = nerve.Asset(job=data['job'], path=data['path'], version=version)
-                assetFormats = [nerve.maya.Format.GetLong(f) for f in asset.GetFormats()]
+        if not len(versionlist):
+            return True
 
-                if data['action'] == 'release': # if release display all formats
-                    allFormats = nerve.maya.Format.GetAllLong()
-                else: # if gather display only available formats
-                    allFormats = assetFormats
+        path = self.GetData('path')
+        version = 0 if versionlist[0] == '<new>' else nerve.String.versionAsInt( versionlist[0] )
 
-            cmds.textScrollList(self.ctrl['formatlist'], e=True, removeAll=True)
+        args = {}
+        args['job'] = self.GetData('job')
+        args['path'] = path
+        args['version'] = version
+        asset = nerve.Asset(**args)
 
-            args = {'edit':True}
-            for i in range(len(allFormats)): # for every available format
-                args['append'] = allFormats[i] # append item
-                if data['action'] == 'release': # if release make available bold and unavailable italics
-                    if allFormats[i] in assetFormats:
-                        args['lineFont'] = [i+1, 'boldLabelFont']
-                    else:
-                        args['lineFont'] = [i+1, 'obliqueLabelFont']
-                else: # if gather make all plain font
-                    args['lineFont'] = [i+1, 'plainLabelFont']
-                cmds.textScrollList(self.ctrl['formatlist'], **args) # append item with font
+        formats_asset = [nerve.maya.Format.GetLong(f) for f in asset.GetFormats()]
+        formats_all = nerve.maya.Format.GetAllLong() if self.GetData('action') == 'release' else formats_asset
 
-            # reselect items that exist in updated format list
-            selectItems = []
-            for item in data['formatlist']:
-                if item in allFormats:
-                    selectItems.append(item)
-            if allFormats:
-                cmds.textScrollList(self.ctrl['formatlist'], e=True, selectItem=selectItems)
+        # Create textScrollList arguments
+        args = {'edit':True}
+        for i in range(len(formats_all)): # for every available format
+            args['append'] = formats_all[i] # append item
+            if self.GetData('action') == 'release': # if release make available bold and unavailable italics
+                if formats_all[i] in formats_asset:
+                    args['lineFont'] = [i+1, 'boldLabelFont']
+                else:
+                    args['lineFont'] = [i+1, 'obliqueLabelFont']
 
-        if False: # Asset Data
-            if data['versionlist'][0] != '<new>':
-                asset.SetVersion( data['versionlist'][0] )
-                assetInfo = asset.GetVersionAssetInfo()
-                cmds.textField(self.ctrl['date'], e=True, text=assetInfo['date'])
-                cmds.textField(self.ctrl['user'], e=True, text=assetInfo['user'])
-                cmds.scrollField(self.ctrl['comments'], e=True, text=assetInfo['comments'])
+            else: # if gather make all plain font
+                args['lineFont'] = [i+1, 'plainLabelFont']
 
-            fcover = asset.Exists() and asset.HasCover()
-            cmds.iconTextButton(self.ctrl['cover'], e=True, image=asset.GetCover() if fcover else 'render_swColorPerVertex.png')
-            #if asset.HasCover():
-                #print(asset.GetCover())
+            cmds.textScrollList(self.ctrl['formatlist'], **args) # append item with font
 
-        if True: # Button
-            cmds.button(self.ctrl['doit'], e=True, enable=len(selectItems))
+        # reselect items that exist in updated format list
+        selectItems = []
+        for item in formatlist:
+            if item in formats_all:
+                selectItems.append(item)
+
+        if formats_all:
+            cmds.textScrollList(self.ctrl['formatlist'], e=True, selectItem=selectItems)
+
+    def Refresh_versionlist(self):
+        path = self.GetData('path')
+        versionlist = self.GetData('versionlist')
+        # Asset
+        args = {}
+        args['job'] = self.GetData('job')
+        args['path'] = path
+        asset = nerve.Asset(**args)
+
+        # Versions
+        versions = []
+        if asset.Exists():
+            versions = asset.GetVersionsAsString()
+        # add new version item
+        if self.GetData('action') == 'release':
+            versions.append('<new>')
+
+        cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
+        if len(versionlist) and versionlist[0] in versions:
+            cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=versionlist[0])
+
+    def Refresh_pathlist(self):
+        path = self.GetData('path')
+        pathlist = self.GetData('pathlist')
+
+        # Asset
+        args = {}
+        args['job'] = self.GetData('job')
+        args['path'] = path if (path and path[-1] == '/') else nerve.String.GetParentPath(path)
+        asset = nerve.Asset(**args)
+
+        # Children
+        if '*' in path: # Get Children with Wildcard
+            children = asset.GetChildrenByFilter( path.replace('*', '') )
+        else: # Get all children
+            children = asset.GetChildren()
+
+        # Add level up
+        if path and path != '/' and '/' in path[1:]: # path is set and is not / and is not at root level
+            children.insert(0, '..')
+
+        # Empty Scroll List
+        cmds.textScrollList(self.ctrl['pathlist'], e=True, removeAll=True, append=children)
+
+        # Make Assets with Children bold
+        for i in range(len(children)):
+            args['path'] = path+'/'+children[i]
+            font = 'boldLabelFont' if children[i] and nerve.Asset(**args).HasChildren() else 'plainLabelFont'
+            cmds.textScrollList(self.ctrl['pathlist'], e=True, lineFont=(i+1, font))
+
+        # Reselect
+        if len(pathlist) and pathlist[0] in children:
+            cmds.textScrollList(self.ctrl['pathlist'], e=True, selectItem=pathlist[0])
+
+    def Refresh_action(self):
+        # Change Button label
+        action = self.GetData('action')
+
+        # Enable/Disable Asset Data
+        if action == 'release':
+            cmds.textField(self.ctrl['desc'], e=True, enable=True)
+            cmds.scrollField(self.ctrl['comment'], e=True, editable=True, backgroundColor=(0.17, 0.17, 0.17))
+        else:
+            cmds.textField(self.ctrl['desc'], e=True, enable=False)
+            cmds.scrollField(self.ctrl['comment'], e=True, editable=False, backgroundColor=(0.25, 0.25, 0.25))
 
     def EnterPath(self):
         sel = self.GetData('pathlist')
@@ -686,7 +745,7 @@ class Manager(Base):
 
     def ReleaseGather(self, *args):
         args = {}
-        for key in ['path', 'job', 'version', 'description']:
+        for key in ['path', 'job', 'version', 'description', 'comment']:
             args[key] = self.GetData(key)
         asset = nerve.Asset(**args)
 
@@ -696,10 +755,14 @@ class Manager(Base):
             if self.GetData('action') == 'release':
                 nerve.maya.ReleaseUI(asset.GetFilePath('session'))
                 asset.Create()
+
+                cover = nerve.Path(self.GetData('cover'))
+                if cover.Exists():
+                    asset.SetCover(cover)
             else:
                 nerve.maya.GatherUI(asset.GetFilePath('session'))
 
-        if self.GetData('action'):
+        if self.GetData('action') == 'release':
             #msg = 'Asset released.\n{}\n{}'.format(args['path'].rstrip('/'), '\n'.join(self.GetData('formats')))
             msg = 'Asset Released.'
             Dialog.Confirm(msg)
@@ -748,8 +811,8 @@ class Manager(Base):
             if key == 'cover':
                 return cmds.iconTextButton(self.ctrl['cover'], q=True, image=True)
 
-            if key == 'comments':
-                cmds.scrollField(self.ctrl['comments'], q=True, text=True)
+            if key == 'comment':
+                return cmds.scrollField(self.ctrl['comment'], q=True, text=True)
 
             raise Exception(key+' not found in data.')
 

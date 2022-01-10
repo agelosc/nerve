@@ -58,6 +58,14 @@ class Image:
         if not self.GetFile().Exists():
             raise Exception('Could not save image: {}'.format( self.GetFile() ))
 
+    def SaveAs(self, filepath):
+        if not isinstance(filepath, Path):
+            filepath = Path(filepath)
+
+        self.image.save( str(filepath), filepath.GetExtension(), 100 )
+        if not filepath.Exists():
+            raise Exception('Could not save image: {}'.format(filepath))
+
     def Open(self):
         if not self.GetFile().Exists():
             raise Exception('File does not exist: {}.'.format(self.GetFile()))
@@ -179,6 +187,10 @@ class String:
             file_path = filedialog.askopenfilename()
             root.destroy()
             return file_path
+
+    @staticmethod
+    def GetParentPath(path):
+        return Path(path).GetParent().AsString()
 
 class Path:
     def __init__(self, path=None, separator='/'):
@@ -657,6 +669,18 @@ class Base:
     def HasCover(self):
         return self.GetCover().Exists()
 
+    def SetCover(self, filepath):
+        if not isinstance(file, Path):
+            filepath = Path(filepath)
+
+        if not filepath.Exists():
+            print('{} does not exist. Cannot set cover.'.format(filepath))
+            return False
+
+        cover = Image(filepath)
+        cover.Square()
+        cover.SaveAs( self.GetCover() )
+
     def HasChildren(self):
         return len(self.GetChildren())
 
@@ -828,6 +852,7 @@ class SublayerBase(Base):
         defaults = {}
         defaults['path'] = str(path)
         defaults['layer'] = ''
+        defaults['comment'] = ''
         defaults['version'] = 0
         defaults['frameRange'] = None
         defaults['filePerFrame'] = False
@@ -849,6 +874,15 @@ class SublayerBase(Base):
         self.data['version'] = version
         self.SetPaths()
 
+    def GetLatestFormat(self):
+        from pxr import Usd, Sdf
+
+        stage = Usd.Stage.Open( self.GetFilePath().AsString() )
+        prim = self.GetPrim(stage)
+        versionSet = prim.GetVariantSet('version')
+        versionSet.SetVariantSelection( self.GetVersionAsString() )
+        formatSet = prim.GetVariantSet('format')
+        return formatSet.GetVariantSelection()
 
     def GetFormats(self):
         from pxr import Usd, Sdf
@@ -918,7 +952,7 @@ class SublayerBase(Base):
         return [ String.versionAsInt(v) for v in versionSet.GetVariantNames() ]
 
     def GetVersionsAsString(self, fromDisk=False):
-        return [versionAsString(v) for v in self.GetVersions(fromDisk)]
+        return [String.versionAsString(v) for v in self.GetVersions(fromDisk)]
 
     def GetVersionsFromDisk(self):
         files = Path.Glob(self.GetFilePattern('versions'))
@@ -1106,14 +1140,14 @@ class Asset(SublayerBase):
         outpath+= self.GetPath().GetParent()
         return outpath
 
-    @staticmethod
-    def GetChildrenByFilter(path, jobpath):
+    def GetChildrenByFilter(self, path):
         path = path.replace('//', '/')
-        children = []
-        asset = Asset(job=jobpath)
-        searchpath = asset.GetRootPath().AsString() + path + '*.usda'
 
+        children = []
+        asset = Asset( job=self.data['job'] )
+        searchpath = asset.GetRootPath().AsString() + path + '*.usda'
         files = Path.Glob( searchpath )
+
         return [ f.GetFileName() for f in files ]
 
     def HasChildren(self):
