@@ -97,6 +97,10 @@ class Menu:
         cmds.menuItem(divider=True, dividerLabel='Tools', parent=self.ctrl['mainMenu'])
         self.Tools()
 
+        cmds.menuItem(divider=True, dividerLabel='Assets', parent=self.ctrl['mainMenu'])
+        cmds.menuItem(subMenu=False, label='Release...', parent=self.ctrl['mainMenu'], command=partial(uicmd, Manager, 'release'))
+        cmds.menuItem(subMenu=False, label='Gather...', parent=self.ctrl['mainMenu'], command=partial(uicmd, Manager, 'gather'))
+
         cmds.menuItem(divider=True, parent=self.ctrl['mainMenu'])
         cmds.menuItem(subMenu=False, label='Reload Nerve...', parent=self.ctrl['mainMenu'], command=self.reloadNerve)
 
@@ -318,7 +322,7 @@ class Base:
 
     def window(self, **kwargs):
         defaults = {}
-        defaults['title'] = self.name
+        defaults['title'] = self.name.capitalize()
         defaults['menuBar'] = False
         defaults['iconName'] = self.name
         defaults['sizeable'] = False
@@ -348,7 +352,7 @@ class Base:
         return cmds.frameLayout(**kwargs)
 
 class Manager(Base):
-    def __init__(self):
+    def __init__(self, action='release'):
         import time
 
         self.name = 'nerver'
@@ -356,6 +360,7 @@ class Manager(Base):
         self.height = 700
         self.col1 = 60
         self.cover = 'render_swColorPerVertex.png'
+        self.initAction = action
 
         self.time = time.time()
         self.clicks = 0
@@ -375,7 +380,6 @@ class Manager(Base):
                     self.ctrl['assets'] = cmds.columnLayout(width=self.width-8)
                     self.AssetsLayout()
                     cmds.setParent('..')
-
                 cmds.setParent('..')
             cmds.setParent('..')
 
@@ -393,8 +397,13 @@ class Manager(Base):
             self.text('Action')
             self.ctrl['action'] = cmds.radioCollection()
             width = (self.width - (self.col1*1) )/4
-            cmds.radioButton(label='Release', changeCommand=self.Refresh, select=True, width=width)
-            cmds.radioButton(label='Gather', changeCommand=self.Refresh, width=width)
+            self.ctrl['releaseRadio'] = cmds.radioButton(label='Release', changeCommand=self.Refresh, select=True, width=width)
+            self.ctrl['gatherRadio'] = cmds.radioButton(label='Gather', changeCommand=self.Refresh, width=width)
+
+            if self.initAction == 'release':
+                cmds.radioButton(self.ctrl['releaseRadio'], e=True, select=True)
+            else:
+                cmds.radioButton(self.ctrl['gatherRadio'], e=True, select=True)
             cmds.setParent('..')
 
         self.separator()
@@ -427,6 +436,15 @@ class Manager(Base):
             self.ctrl['formatlist'] = self.textScrollList(width=200, allowMultiSelection=True, selectCommand=self.Refresh)
             cmds.setParent('..')
         cmds.text('', height=10)
+        self.separator()
+        if True: # transform
+            cmds.rowLayout(numberOfColumns=2, height=50)
+            self.text('Transform')
+            self.ctrl['transform'] = cmds.optionMenu()
+            cmds.menuItem(label='Keep')
+            cmds.menuItem(label='Origin')
+            cmds.setParent('..')
+
         self.separator()
 
         if True: # Asset data
@@ -712,9 +730,11 @@ class Manager(Base):
         if action == 'release':
             cmds.textField(self.ctrl['desc'], e=True, enable=True)
             cmds.scrollField(self.ctrl['comment'], e=True, editable=True, backgroundColor=(0.17, 0.17, 0.17))
+            cmds.optionMenu(self.ctrl['transform'], e=True, enable=True)
         else:
             cmds.textField(self.ctrl['desc'], e=True, enable=False)
             cmds.scrollField(self.ctrl['comment'], e=True, editable=False, backgroundColor=(0.25, 0.25, 0.25))
+            cmds.optionMenu(self.ctrl['transform'], e=True, enable=False)
 
     def EnterPath(self):
         sel = self.GetData('pathlist')
@@ -753,6 +773,28 @@ class Manager(Base):
         else:
             cmds.textField(self.ctrl['path'], e=True, text=sel[0])
 
+    def GetTransform(self, n):
+        data = {}
+        pos = cmds.xform(n, q=True, ws=True, t=True)
+        rot = cmds.xform(n, q=True, ws=True, ro=True)
+        scale = cmds.xform(n, q=True, ws=True, s=True)
+
+        data['transform'] = (pos[0], pos[1], pos[2])
+        data['rotate'] = (rot[0], rot[1], rot[2])
+        data['scale'] = (scale[0], scale[1], scale[2])
+
+        return data
+
+    def SetTransform(self, n, data):
+        cmds.xform(n, ws=True, t=data['transform'])
+        cmds.xform(n, ws=True, ro=data['rotate'])
+        cmds.xform(n, ws=True, s=data['scale'])
+
+    def ResetTransform(self, n):
+        cmds.xform(n, ws=True, t=(0,0,0))
+        cmds.xform(n, ws=True, ro=(0,0,0))
+        cmds.xform(n, ws=True, s=(1,1,1))
+
     def ReleaseGather(self, *args):
         args = {}
         for key in ['path', 'job', 'version', 'description', 'comment']:
@@ -763,12 +805,34 @@ class Manager(Base):
             asset.SetFormat( nerve.maya.Format.GetShort(format) )
 
             if self.GetData('action') == 'release':
+                # Transform
+                sel = cmds.ls(sl=True, l=True)
+                xforms = []
+
+                if not len(sel):
+                    print('Nothing Selected. Skipping release...'),
+                    return False
+
+                if self.GetData('transform') == 2:
+                    for n in sel:
+                        xforms.append( self.GetTransform(n) )
+                        self.ResetTransform(n)
+
                 nerve.maya.ReleaseUI(asset.GetFilePath('session'))
                 asset.Create()
+
+                # Set Transform
+                if self.GetData('transform') == 2:
+                    for i in range(len(sel)):
+                        n = sel[i]
+                        xform = xforms[i]
+                        self.SetTransform(n, xform)
 
                 cover = nerve.Path(self.GetData('cover'))
                 if cover.Exists():
                     asset.SetCover(cover)
+
+
             else:
                 nerve.maya.GatherUI(asset.GetFilePath('session'))
 
@@ -823,6 +887,9 @@ class Manager(Base):
 
             if key == 'comment':
                 return cmds.scrollField(self.ctrl['comment'], q=True, text=True)
+
+            if key == 'transform':
+                return cmds.optionMenu(self.ctrl['transform'], q=True, select=True)
 
             raise Exception(key+' not found in data.')
 
