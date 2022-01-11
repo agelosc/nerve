@@ -14,7 +14,6 @@ import nerve.apps
 import nerve.maya
 
 import nerve.maya.utilities as utils
-
 import maya.cmds as cmds
 import maya.mel as mel
 
@@ -124,7 +123,7 @@ class Menu:
         app.Create()
 
         job.Set( job.GetDir() )
-        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'])
+        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()))
         print('Job {} created.'.format(job.GetDir())),
 
     def JobAdd(self, *args):
@@ -143,7 +142,7 @@ class Menu:
             return False
 
         nerve.Job.AddToRecent(dir)
-        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'])
+        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()))
 
     def reloadNerve(self, *args):
         import nerve

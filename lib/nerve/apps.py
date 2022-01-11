@@ -52,7 +52,7 @@ class houdini(Base):
         txt = '@echo off\n'
         txt+= 'set JOB={}\n'.format(self.data['path'])
         txt+= 'set HOUDINI_VERSION=19.0.383\n'
-        txt+= 'set HOUDINI_PACKAGE_DIR={}/houdini/packages\n'.format(APP_DIR)
+        txt+= 'set HOUDINI_PACKAGE_DIR=%NERVE_LOCAL_PATH%/houdini/packages\n'
         txt+= 'start "" "C:/Program Files/Side Effects Software/Houdini %HOUDINI_VERSION%/bin/houdinifx.exe"\n'
         return txt
 
@@ -67,6 +67,6 @@ class maya(Base):
         txt = '@echo off\n'
         txt+= 'set JOB={}\n'.format(self.data['path'])
         txt+= 'set MAYA_PROJECT={}\n'.format(self.data['appath'])
-        txt+= 'set MAYA_MODULE_PATH=%MAYA_MODULE_PATH%;{}/maya\n'.format(APP_DIR)
+        txt+= 'set MAYA_MODULE_PATH=%MAYA_MODULE_PATH%;%NERVE_LOCAL_PATH%/maya\n'
         txt+= 'start "" "C:/Program Files/Autodesk/Maya2022/bin/maya.exe" -command nerve\n'
         return txt
