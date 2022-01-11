@@ -52,7 +52,6 @@ def job_add(request):
             form_add = forms.job_add()
 
         if 'job_create' in request.POST:
-            print("JOB_CREATE")
             form_create = forms.job_create(request.POST)
             if form_create.is_valid():
                 path = form_create.cleaned_data.get('path')
@@ -124,20 +123,33 @@ def FileUploadTo(file, path):
         for chunk in file.chunks():
             dest.write(chunk)
 
-def thumbnail(request):
+def cover(request):
+
     if 'job' not in request.GET.keys():
         return HttpResponseRedirect('/')
+
 
     job = request.GET['job']
 
     if 'asset' in request.GET.keys():
         pass
-
     if 'sublayer' in request.GET.keys():
         pass
 
     Job = nerve.Job(job)
-    FileUploadTo(request.FILES['file'], Job.GetFilePath('cover') )
+    #FileUploadTo(request.FILES['file'], Job.GetFilePath('cover') )
+    image = nerve.Image()
+    tmp = image.GetFile()
+
+    if not tmp.GetParent().Exists():
+        tmp.Create()
+
+    FileUploadTo(request.FILES['file'], str(tmp))
+    image.Load(tmp)
+
+    image.Square()
+    image.Save()
+    image.GetFile().Copy( Job.GetFilePath('cover') )
 
     return HttpResponse('/')
 

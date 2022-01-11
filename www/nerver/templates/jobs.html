@@ -16,7 +16,7 @@
 		<div class="grid-item">
 			<div class="item">
 					<img class="item-cover" src="{% if job.hasCover %} /image/{{job.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
-					<div class="overlay uploadcover" data-url="/thumbnail/?job={{ job.path }}">
+					<div class="overlay uploadcover" data-url="/cover/?job={{ job.path }}">
 						<div class="item-title">
 							<!-- <span class="item-anim"></span> -->
 							<a href='/assets/?job={{ job.path }}'><h1>{{ job.name }}</h1></a>
@@ -60,7 +60,6 @@
 
 {% endblock %}
 
-
 {% block javascript %}
 $(document).ready(function(){
 	const csrftoken = Cookies.get('csrftoken');
@@ -87,7 +86,6 @@ $(document).ready(function(){
 
 
 	// DROPZONES
-
 	$(".uploadcover").each( function(){
 		$(this).dropzone({
 			url: $(this).data('url'),
@@ -101,7 +99,8 @@ $(document).ready(function(){
 			resizeQuality: 1,
 			resizeMethod: "crop",
 			success: function(file, response){
-				location.reload()
+				//console.log(response);
+				location.reload();
 			}
 		});
 	});

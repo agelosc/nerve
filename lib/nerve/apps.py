@@ -1,7 +1,8 @@
+import sys
 import nerve
 import shutil, subprocess
-from pathlib import Path
 APP_DIR = nerve.Path(__file__).GetParent(3) + 'apps'
+
 
 class Base:
     def __init__(self):
@@ -11,6 +12,7 @@ class Base:
         self.data['cmdpath'].SetContent( self.LoadCmd() )
 
     def Create(self):
+
         job = nerve.Job(self.data['path'])
         if not job.Exists():
             job.Create()
@@ -18,9 +20,19 @@ class Base:
         if not self.data['appath'].Exists():
             self.data['appath'].Create()
 
-            template = APP_DIR + self.data['name'] + 'template'
-            if template.Exists():
-                shutil.copytree( template.AsString(), self.data['appath'].AsString(), dirs_exist_ok=True )
+        template = APP_DIR + self.data['name'] + 'template'
+        if template.Exists():
+            if sys.version_info > (3,8):
+                shutil.copytree( template.AsString(), self.data['appath'].AsString(), dirs_exist_ok=True)
+            else:
+                for file in nerve.Path.Glob( template + '/*'):
+                    target = nerve.Path(file.Replace(template, self.data['appath']))
+                    if not target.Exists():
+                        if target.IsFile():
+                            shutil.copyfile(str(file), str(target))
+                        else:
+                            shutil.copytree( str(file), str(target) )
+
 
             self.data['cmdpath'].Create()
 

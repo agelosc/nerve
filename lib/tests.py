@@ -152,8 +152,9 @@ def PathTests():
 
 def ImageTests():
     image = nerve.Image()
-
-    assert image.GetFile() is not None
+    file = image.GetFile()
+    assert file is not None
+    image.Load('C:/users/lemon/Desktop/test.jpg')
 
     print('# Passed Image tests #')
 
@@ -272,6 +273,7 @@ def JobTests():
 
     if job.Exists():
         job.Delete()
+
     assert job.Exists() is False
 
     job.Create()
@@ -279,13 +281,17 @@ def JobTests():
 
     assert job.GetAssets() == []
 
+    job = nerve.Job('$TEMP/nerve2')
+    job.Create()
+    assert job.Exists() is True
+
 #PathTests()
-#ImageTests()
+ImageTests()
 #JobTests()
 #AssetTests()
 #LayerTests()
 #SublayerTests()
-AssetTests()
+#AssetTests()
 #LibTests()
 #AppTests()
 

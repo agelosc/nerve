@@ -13,6 +13,14 @@ class Image:
         self.data = {}
         self.data['file'] = Path(filename)
 
+    def Load(self, filename):
+        if not isinstance(filename, Path):
+            filename = Path(filename)
+
+        self.image.load(filename.AsString())
+        self.data['file'] = filename
+        return self
+
     def Clipboard(self):
         from PySide2.QtWidgets import QApplication
 
@@ -32,7 +40,7 @@ class Image:
     def GetFile(self):
         if not self.data['file']:
             timestamp = str(time.time()).replace('.', '_')
-            self.data['file'] = (Path('$TEMP') + 'nerve' + timestamp).SetExtension('png')
+            self.data['file'] = Path('$TEMP/nerve/covers/{}.png'.format(timestamp))
             self.CleanTemp()
 
         return self.data['file']
@@ -52,6 +60,8 @@ class Image:
             else:
                 rect = QRect((width/2)-(height/2), 0, height, height)
             self.image = self.image.copy(rect)
+
+        self.image = self.image.scaled(512, 512)
 
     def Save(self):
         self.image.save( self.GetFile().AsString(), self.GetExtension(), 100 )
@@ -269,7 +279,8 @@ class Path:
         return [Path(item) for item in sorted(glob(pattern.AsString()))]
 
     def Replace(self, rep, repwith):
-        return Path(self.AsString().replace(rep, repwith))
+
+        return Path(self.AsString().replace(str(rep), str(repwith)))
 
     # Magic Methods #
     def __repr__(self):
@@ -750,6 +761,10 @@ class Job(Base):
         from pxr import Usd, UsdGeom
 
         self.GetFilePath().GetParent().Create()
+        for dir in ['elements/input', 'elements/output', 'elements/2D', 'elements/3D']:
+            folder = Path(self.GetDir()) + dir
+            if not folder.Exists():
+                folder.Create()
 
         layer = USD.CreateOrOpen( self.GetFilePath() )
         layer.Clear()

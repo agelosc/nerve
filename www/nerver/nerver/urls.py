@@ -33,7 +33,7 @@ urlpatterns = [
 
     path('job_add', views.job_add, name='job_add'),
     path('job/<path:job>', views.job, name="job"),
-    path('thumbnail/', views.thumbnail, name="thumbnail"),
+    path('cover/', views.cover, name="cover"),
 
     path('asset/<path:asset>', views.asset, name='asset')
 ]

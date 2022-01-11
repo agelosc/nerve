@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 
 import nerve
 import nerve.win
+import nerve.apps
 import nerve.maya
+
 import nerve.maya.utilities as utils
 
 import maya.cmds as cmds
@@ -81,7 +83,7 @@ class Menu:
 
         cmds.menuItem(divider=True, parent=self.ctrl['jobs'])
         cmds.menuItem(subMenu=False, label='Add...', parent=self.ctrl['jobs'], command=self.JobAdd)
-        #cmds.menuItem(subMenu=False, label='Create...', parent=self.ctrl['jobs'], command=self.JobCreate)
+        cmds.menuItem(subMenu=False, label='Create...', parent=self.ctrl['jobs'], command=self.JobCreate)
 
         # Explore
         cmds.menuItem(subMenu=False, label='Explore', parent=self.ctrl['mainMenu'], command=utils.Explore)
@@ -114,6 +116,16 @@ class Menu:
         dir = Dialog.File(3)
         if not dir:
             return False
+
+        job = nerve.maya.Job(dir[0])
+        job.Create()
+        job.AddToRecent( job.GetDir() )
+        app = nerve.apps.maya(job.GetDir())
+        app.Create()
+
+        job.Set( job.GetDir() )
+        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'])
+        print('Job {} created.'.format(job.GetDir())),
 
     def JobAdd(self, *args):
         dir = Dialog.File(3)
