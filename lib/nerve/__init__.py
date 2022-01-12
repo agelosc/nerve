@@ -191,7 +191,7 @@ class String:
         if mode == 'dir':
             path = filedialog.askdirectory(mustexist=False)
             root.destroy()
-            return file_path
+            return path
 
         if mode == 'file':
             file_path = filedialog.askopenfilename()
@@ -681,7 +681,7 @@ class Base:
         return self.GetCover().Exists()
 
     def SetCover(self, filepath):
-        if not isinstance(file, Path):
+        if not isinstance(filepath, Path):
             filepath = Path(filepath)
 
         if not filepath.Exists():
@@ -807,7 +807,7 @@ class Job(Base):
 
     @staticmethod
     def Get():
-        return os.environ['JOB'] if 'JOB' in os.environ.keys() else nerve.conf['JOB']
+        return os.environ['JOB'] if 'JOB' in os.environ.keys() else conf['JOB']
 
     def GetDir(self):
         return self.data['directory'].AsString()
@@ -883,7 +883,7 @@ class SublayerBase(Base):
         self.SetPaths()
 
     def SetVersion(self, version):
-        if isinstance(version, (str, unicode)):
+        if not isinstance(version, int):
             version = String.versionAsInt(version)
 
         self.data['version'] = version
@@ -1049,6 +1049,7 @@ class SublayerBase(Base):
         return '/nerve/{}s/{}'.format(self.__class__.__name__, name)
 
     def GetPrim(self, stage=None):
+        from pxr import Usd
         if not stage:
             stage = Usd.Open( self.GetFilePath().AsString() )
         primpath = self.GetPrimPath()

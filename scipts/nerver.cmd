@@ -1,3 +1,3 @@
 @echo off
-CD "R:\software\nerve"
+CD %NERVE_LOCAL_PATH%
 python R:/software/nerve/www/nerver/manage.py runserver
