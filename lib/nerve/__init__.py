@@ -64,6 +64,10 @@ class Image:
         self.image = self.image.scaled(512, 512)
 
     def Save(self):
+        file = self.GetFile()
+        if not file.GetParent().Exists():
+            file.GetParent().Create()
+            
         self.image.save( self.GetFile().AsString(), self.GetExtension(), 100 )
         if not self.GetFile().Exists():
             raise Exception('Could not save image: {}'.format( self.GetFile() ))
