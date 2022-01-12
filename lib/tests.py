@@ -5,6 +5,11 @@ print(sys.version)
 print('')
 print('##')
 
+job = nerve.Job()
+if job.Exists():
+    job.Delete()
+job.Create()
+
 def PathTests():
     # Expand Environmental Variable
     assert nerve.Path('$TEMP') == os.environ['TEMP']
@@ -230,6 +235,7 @@ def AssetTests():
     asset = nerve.Asset('blah/ModelB', version=1)
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
+    
     asset.Create()
     assert asset.Exists() is True
 
@@ -286,9 +292,9 @@ def JobTests():
     assert job.Exists() is True
 
 #PathTests()
-ImageTests()
+#ImageTests()
 #JobTests()
-#AssetTests()
+AssetTests()
 #LayerTests()
 #SublayerTests()
 #AssetTests()

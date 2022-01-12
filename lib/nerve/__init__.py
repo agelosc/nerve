@@ -67,7 +67,7 @@ class Image:
         file = self.GetFile()
         if not file.GetParent().Exists():
             file.GetParent().Create()
-            
+
         self.image.save( self.GetFile().AsString(), self.GetExtension(), 100 )
         if not self.GetFile().Exists():
             raise Exception('Could not save image: {}'.format( self.GetFile() ))
@@ -1085,6 +1085,9 @@ class SublayerBase(Base):
 
         # Set Custom Layer Data
         self.SetCustomLayerData(layer)
+
+        if not self.GetFilePath('session').Exists():
+            return True
 
         #layer.SetPerimissionToEdit(True)
         stage = Usd.Stage.Open(layer.identifier)
