@@ -229,37 +229,6 @@ class Menu:
     def Manager(self, *args):
         Manager(args[0], args[1])
 
-    def LayerMenu(self, *args):
-        ctrl = args[0]
-
-        cmds.menu(ctrl, e=True, deleteAllItems=True)
-
-        layer = nerve.Layer()
-        for seqname in layer.GetChildren():
-            seqctrl = cmds.menuItem( subMenu=True, tearOff=True, label=seqname, parent=ctrl)
-            seq = nerve.Layer(seqname)
-            for shotname in seq.GetChildren():
-                shot = nerve.Layer(seqname+'/'+shotname)
-
-                frameRange = shot.GetFrameRange() if shot.HasFrameRange() else [0,0]
-                description = shot.GetDescription() if shot.HasDescription() else ''
-
-                label = '{0}'.format( shotname )
-                label+= ': [{0} - {1}]'.format( str(int( frameRange[0] )), str(int(frameRange[1])) ) if shot.HasFrameRange() else ''
-                label+= ' ' + description
-
-                shotctrl = cmds.menuItem(label=label, parent=seqctrl, command=partial(self.SetFrameRange, frameRange[0], frameRange[1]))
-                shotOptCtrl = cmds.menuItem(optionBox=True)
-                cmds.menuItem(shotOptCtrl, e=True, command=partial(self.Manager, 'release', seqname+'/'+shotname))
-
-            # New
-            cmds.menuItem(divider=True, parent=seqctrl)
-            cmds.menuItem(subMenu=False, label='New...', parent=seqctrl, command=partial(CreateShot, seqname))
-
-        # New
-        cmds.menuItem(divider=True, parent=ctrl)
-        cmds.menuItem(subMenu=False, label='New...', parent=ctrl, command=CreateSequence)
-
     def SetFrameRange(self, *args):
         cmds.playbackOptions(e=True, min=args[0], max=args[1])
 

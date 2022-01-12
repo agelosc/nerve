@@ -230,14 +230,16 @@ def AssetTests():
     layer.Save()
     asset.Create()
     assert asset.Exists() is True
+    assert asset.HasParent() is False
 
     # Create test asset modelB
     asset = nerve.Asset('blah/ModelB', version=1)
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
-    
+
     asset.Create()
     assert asset.Exists() is True
+    assert asset.HasParent() is True
 
     # Create test asset modelC
     asset = nerve.Asset('ModelC', description='DESC', version=1, frameRange=(1,10), comment='Comment!')
@@ -245,9 +247,20 @@ def AssetTests():
     layer.Save()
     asset.Create()
     assert asset.Exists() is True
+    assert asset.HasParent() is False
 
     asset = nerve.Asset('ModelC', version=1)
     assert asset.GetDescription() == 'DESC'
+
+    job = nerve.Job('$TEMP/nerve2')
+    if not job.Exists():
+        job.Create()
+    
+    asset = nerve.Asset( 'grp/asset', version=1, job=job.GetDir())
+    asset.CreateDummySession()
+    asset.Create()
+    assert asset.GetFilePath('session').Exists() is True
+    
 
     print('# Passed Asset tests #')
 

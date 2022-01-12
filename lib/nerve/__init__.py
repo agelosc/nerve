@@ -696,6 +696,10 @@ class Base:
         cover.Square()
         cover.SaveAs( self.GetCover() )
 
+    def HasParent(self):
+        path = self.GetPath()
+        return path.HasParent()
+
     def HasChildren(self):
         return len(self.GetChildren())
 
@@ -1139,6 +1143,10 @@ class SublayerBase(Base):
                     layer.subLayerPaths.append( sublayerFile )
             layer.Save()
 
+    def CreateDummySession(self):
+        layer = USD.CreateOrOpen( self.GetFilePath('session') )
+        layer.Save()
+        
 class Asset(SublayerBase):
     def __init__(self, path='', **kwargs):
         SublayerBase.__init__(self, path, **kwargs)
@@ -1195,7 +1203,7 @@ class Asset(SublayerBase):
         SublayerBase.Create(self)
 
         if self.GetPath().HasParent():
-            parent = Asset( self.GetPath().GetParent() )
+            parent = Asset( self.GetPath().GetParent(), job=self.GetJob().GetDir() )
 
             if not parent.Exists():
                 parent.Create()
