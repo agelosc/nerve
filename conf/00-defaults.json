@@ -1,5 +1,5 @@
 {
-    "JOB": "$TEMP/nerve",
+    "JOB": "$TEMP/nerve/job",
     "LIB": ["$TEMP/lib"],
     "DIR": "nerve"
 }

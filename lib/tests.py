@@ -162,38 +162,42 @@ def ImageTests():
     assert file is not None
     image.Load('C:/users/lemon/Desktop/test.jpg')
 
-    print('# Passed Image tests #')
+    print('# Passed Image tests')
 
-def LayerTests():
-    layer = nerve.Layer()
-    layer.Create()
+def ShotTests():
+    job = nerve.Shot()
+    job.Create()
 
-    seq = nerve.Layer('SEQ')
+    seq = nerve.Shot('SEQ')
     seq.Create()
 
-    shot = nerve.Layer('SEQ/SHOT')
+    
+    shot = nerve.Shot('SEQ/SHOT')
     shot.Create()
 
-    seq2 = nerve.Layer('SEQ2')
+    seq2 = nerve.Shot('SEQ2')
     seq2.Create()
+        
 
-    shot1 = nerve.Layer('SEQ2/SHOT1')
+    shot1 = nerve.Shot('SEQ2/SHOT1')
     shot1.Create()
-    shot2 = nerve.Layer('SEQ2/SHOT2')
+    shot2 = nerve.Shot('SEQ2/SHOT2')
     shot2.Create()
 
-    assert seq.HasParentLayer() is True
-    assert shot.HasParentLayer() is True
+    assert seq.HasParentShot() is True
+    assert shot.HasParentShot() is True
 
-    assert layer.HasParentLayer() is False
-    assert seq.HasParentLayer() is True
-    assert shot.HasParentLayer() is True
+    assert job.HasParentShot() is False
+    assert seq.HasParentShot() is True
+    assert shot.HasParentShot() is True
 
-    assert seq.GetParentLayer().GetName() == 'job'
-    assert shot.GetParentLayer().GetName() == 'SEQ'
+    assert seq.GetParentShot().GetName() == 'job'
+    assert shot.GetParentShot().GetName() == 'SEQ'
 
-    assert layer.GetChildren() == ['SEQ', 'SEQ2']
+    assert job.GetChildren() == ['SEQ', 'SEQ2']
     assert seq.GetChildren() == ['SHOT']
+
+    print('Passed all Shot Tests')
 
 def SublayerTests():
 
@@ -232,7 +236,7 @@ def AssetTests():
     asset.Create()
     assert asset.GetFilePath().Exists() is True
     assert asset.Exists() == True
-
+    
     # Asset with parent
     assert asset.HasParent() is False
     asset = nerve.Asset('parent/child')
@@ -241,7 +245,9 @@ def AssetTests():
     assert asset.HasParent() is True
     parent = asset.GetParent()
 
-    print('# Passed Asset tests #')
+    AssetTestsOLD()
+
+    print('# Passed Asset tests')
 
 def AssetTestsOLD():
     # Create test asset modelA
@@ -314,23 +320,34 @@ def JobTests():
     job = nerve.Job('$TEMP/nerve2')
     job.Create()
     assert job.Exists() is True
+    job.Delete()
+    assert job.Exists() is False
+
+    print('# Passed all Job tests')
 
 def FormatTests():
     pass
 
+
+def HDRITests():
+    pass
+
 NewJob()
-#FormatTests()
-PathTests()
-ImageTests()
-JobTests()
-AssetTests()
-AssetTestsOLD()
-#LayerTests()
+
+#PathTests()
+#ImageTests()
+#JobTests()
+#AssetTests()
+#AssetTestsOLD()
+#ShotTests()
 #SublayerTests()
 #AssetTests()
+HDRITests()
+
+
 #AppTests()
 
 
 #print('#')
-print('# All Tests Passed.')
+print('# ALL TESTS PASSED.')
 print('##')
