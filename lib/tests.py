@@ -225,6 +225,25 @@ def SublayerTests():
     assert layer.GetSublayers() == ['test']
 
 def AssetTests():
+
+    # Simple Asset
+    asset = nerve.Asset('test')
+    asset.CreateDummySession()
+    asset.Create()
+    assert asset.GetFilePath().Exists() is True
+    assert asset.Exists() == True
+
+    # Asset with parent
+    assert asset.HasParent() is False
+    asset = nerve.Asset('parent/child')
+    asset.CreateDummySession()
+    asset.Create()
+    assert asset.HasParent() is True
+    parent = asset.GetParent()
+
+    print('# Passed Asset tests #')
+
+def AssetTestsOLD():
     # Create test asset modelA
     asset = nerve.Asset('modelA', version=1)
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
@@ -261,14 +280,10 @@ def AssetTests():
     asset.CreateDummySession()
     asset.Create()
     assert asset.GetFilePath('session').Exists() is True
-    
 
-    print('# Passed Asset tests #')
-
-def LibTests():
     asset = nerve.Asset('modelA')
-    asset.SetJobPath("$TEMP/nerve/lib")
-    print(asset.GetFilePath())
+    asset.SetJob("$TEMP/nerve/lib")
+    assert asset.GetFilePath() == 'C:/Users/lemon/AppData/Local/Temp/nerve/lib/nerve/assets/modelA.usda'
 
     layer = nerve.USD.CreateOrOpen( asset.GetFilePath('session') )
     layer.Save()
@@ -305,15 +320,15 @@ def FormatTests():
 
 NewJob()
 #FormatTests()
-#PathTests()
-#ImageTests()
-#JobTests()
-#AssetTests()
+PathTests()
+ImageTests()
+JobTests()
+AssetTests()
+AssetTestsOLD()
 #LayerTests()
 #SublayerTests()
 #AssetTests()
-#LibTests()
-AppTests()
+#AppTests()
 
 
 #print('#')

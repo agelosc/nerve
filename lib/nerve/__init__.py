@@ -1,10 +1,9 @@
 import os, sys, errno
 import json, time
 
-from PySide2.QtGui import QImage
-
 class Image:
     def __init__(self, filename=None):
+        from PySide2.QtGui import QImage
         if filename:
             self.image = QImage(str(filename))
         else:
@@ -641,6 +640,9 @@ class Base:
             if not hasattr(self, attr):
                 setattr(self, attr, {})
 
+        if 'job' in kwargs.keys():
+            kwargs['job'] = Path(str(kwargs['job']))
+
         defaults = {}
         defaults['job'] = os.environ['JOB'] if 'JOB' in os.environ.keys() else Path(conf['JOB'])
         defaults['description'] = ''
@@ -697,8 +699,7 @@ class Base:
         cover.SaveAs( self.GetCover() )
 
     def HasParent(self):
-        path = self.GetPath()
-        return path.HasParent()
+        return self.GetPath().HasParent()
 
     def HasChildren(self):
         return len(self.GetChildren())
@@ -764,6 +765,12 @@ class Job(Base):
         self.SetDefaults(defaults, **kwargs)
 
         self.paths['main'] = Path(directory) + conf['DIR'] + 'job.usda'
+
+    def __str__(self):
+        return self.GetDir()
+
+    def __repr__(self):
+        return self.GetDir()
 
     def Create(self):
         from pxr import Usd, UsdGeom
@@ -867,46 +874,205 @@ class Layer(Base):
         if self.GetPath() == '':
             return Path('job')
         return self.GetPath().GetHead()
-
-class SublayerBase(Base):
+        
+class Asset(Base):
     def __init__(self, path='', **kwargs):
         Base.__init__(self, **kwargs)
 
         defaults = {}
         defaults['path'] = str(path)
         defaults['layer'] = ''
+
         defaults['comment'] = ''
         defaults['version'] = 0
         defaults['frameRange'] = None
         defaults['filePerFrame'] = False
         defaults['format'] = 'usd'
 
-        self.SetDefaults(defaults, **kwargs)
+        self.SetDefaults(defaults, **kwargs)        
 
+        self.SetPaths()
+
+    def SetPaths(self):
+        # Patterns
+        self.patterns['session'] = '{0}/{1}/{1}_v???.*'.format(self.GetRootPath(), self.GetName())
+        self.patterns['versions'] = '{0}/{1}/{1}_v???.*'.format(self.GetRootPath(), self.GetName())
+        self.patterns['formats'] = '{0}/{1}/{1}_{2}.*'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString())
+        self.patterns['range'] = '{0}/{1}/{1}_{2}/{1}_v???.*.{3}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetFormat())
+        self.patterns['children'] = '{0}/{1}/*.usda*'.format( self.GetRootPath(), self.GetName() )
+
+        self.paths['main'] = '{0}/{1}.usda'.format(self.GetRootPath(), self.GetName())
+        self.paths['session'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetFormat() )
+        self.paths['latest'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(-1), self.GetFormat() )
+        self.paths['range'] = '{0}/{1}/{1}_{2}/{1}_{2}.{3}.{4}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), '{}', self.GetFormat() )
+        self.paths['thumbnail'] = '{0}/{1}.png'.format( self.GetRootPath(), self.GetName() )
+
+    def GetRootPath(self):
+        outpath = self.GetJobPath() + 'assets'
+        outpath+= self.GetPath().GetParent()
+        return outpath
+
+    # Parent
+    def GetParent(self):
+        return Asset( path=self.GetPath().GetParent(), job=self.GetJobPath() )
+
+    # Children
+    def GetChildrenByFilter(self, path):
+        path = path.replace('//', '/')
+
+        children = []
+        asset = Asset( job=self.data['job'] )
+        searchpath = asset.GetRootPath().AsString() + path + '*.usda'
+        files = Path.Glob( searchpath )
+
+        return [ f.GetFileName() for f in files ]
+
+    def HasChildren(self):
+        return len(self.GetChildren()) > 0
+
+    def GetChildren(self):
+        if self.data['path'] == '':
+            return self.GetJob().GetAssets()
+
+        if not self.GetFilePath().Exists():
+            return []
+
+        children = []
+        layer = USD.OpenAsAnonymous(self.GetFilePath())
+        for sublayer in layer.subLayerPaths:
+            sublayer = Path(sublayer)
+            if not sublayer.HasVersion():
+                children.append( sublayer.GetFileName() )
+        return children
+
+    # Create
+    def Create(self):
+        self.CreateBase()
+
+        if self.HasParent():
+            parent = self.GetParent()
+            if not parent.Exists():
+                parent.Create()
+
+            layer = USD.CreateOrOpen( parent.GetFilePath() )
+            relpath = './'+self.GetFilePath().GetRelative(-2).AsString()
+            if relpath not in layer.subLayerPaths:
+                layer.subLayerPaths.insert(0, relpath)
+            layer.Save()
+    
+    def CreateBase(self):
+        from pxr import Usd, Sdf, Kind, UsdGeom, UsdShade
+        from datetime import datetime
+        import getpass
+
+        if not self.GetPath():
+            raise Exception('Empty Path. Skipping Export.')
+
+        # Paths
+        abspath = self.GetFilePath('session').AsString()
+        relpath = './'+self.GetFilePath('session').GetRelative(-2).AsString()
+        outpath = relpath
+
+        # Main File
+        layer = USD.CreateOrOpen( self.GetFilePath() )
+
+        # Sublayer only if session is usd
+        if self.GetFormat().lower() in ['usd', 'usda'] and Path(abspath).Exists():
+            layer.subLayerPaths = [outpath]
+
+        # Set Custom Layer Data
+        self.SetCustomLayerData(layer)
+
+        if not self.GetFilePath('session').Exists():
+            return True
+
+        #layer.SetPerimissionToEdit(True)
+        stage = Usd.Stage.Open(layer.identifier)
+
+        # Version Variant
+        prim = self.GetPrim(stage)
+
+        versionSet = prim.GetVariantSets().AddVariantSet('version')
+        versionSet.AddVariant( self.GetVersionAsString() )
+        versionSet.SetVariantSelection( self.GetVersionAsString() )
+        with versionSet.GetVariantEditContext():
+            '''
+            modelAPI = Usd.ModelAPI(prim)
+            data = {}
+            data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
+            data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
+            data['user'] = getpass.getuser()
+            modelAPI.SetAssetInfo(data)
+            '''
+
+            formatSet = prim.GetVariantSets().AddVariantSet('format')
+            formatSet.AddVariant( self.GetFormat() )
+            formatSet.SetVariantSelection( self.GetFormat() )
+            with formatSet.GetVariantEditContext():
+                modelAPI = Usd.ModelAPI(prim)
+                data = {}
+                data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
+                data['name'] = self.GetFormat()
+                data['identifier'] = Sdf.AssetPath(outpath)
+                data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
+                data['user'] = getpass.getuser()
+                if 'frameRange' in self.data.keys() and self.data['frameRange']:
+                    data['frameRange'] = True
+                    data['frameStart'] = self.data['frameRange'][0]
+                    data['frameEnd'] = self.data['frameRange'][1]
+                else:
+                    data['frameRange'] = False
+
+                modelAPI.SetAssetInfo(data)
+
+        layer.Save()
+
+        # Sublayer to shot
+        if self.__class__.__name__ == 'Sublayer':
+            layer = USD.FindOrOpen( self.GetLayer().GetFilePath() )
+            sublayerFile = './'+self.GetFilePath().GetHead()
+            if self.GetFormat().lower() in ['usd', 'usda']:
+                if sublayerFile not in layer.subLayerPaths:
+                    layer.subLayerPaths.append( sublayerFile )
+            layer.Save()
+    
+    def CreateDummySession(self):
+        layer = USD.CreateOrOpen( self.GetFilePath('session') )
+        layer.Save()
+
+    # Json
+    def JsonEncode(self, usd=False):
+        data = Base.JsonEncode(self)
+
+        data['format'] = self.GetFormat()
+        data['children'] = self.GetChildren()
+        data['hasChildren'] = len(data['children'])
+        data['parent'] = self.GetPath().GetParent().AsString()
+        data['hasParent'] = self.GetPath().HasParent()
+
+        data['versions'] = [ (v, String.versionAsString(v)) for v in self.GetVersions(fromDisk=True) ]
+        data['hasVersion'] = len(data['versions']) > 0
+        data['version'] = self.GetVersion()
+        data['versionAsString'] = self.GetVersionAsString()
+
+        data['formats'] = []
+        if usd:
+            data['usd'] = self.GetAssetInfo()
+
+        if False:
+            print('### Asset ###')
+            String.pprint(data)
+            print('#############')
+        return data
+
+    # Format
     def GetFormat(self):
         return self.data['format']
 
     def SetFormat(self, format):
         self.data['format'] = format
         self.SetPaths()
-
-    def SetVersion(self, version):
-        if not isinstance(version, int):
-            version = String.versionAsInt(version)
-
-        self.data['version'] = version
-        self.SetPaths()
-
-    def GetLatestFormat(self):
-        from pxr import Usd, Sdf
-
-        stage = Usd.Stage.Open( self.GetFilePath().AsString() )
-        prim = self.GetPrim(stage)
-        versionSet = prim.GetVariantSet('version')
-        versionSet.SetVariantSelection( self.GetVersionAsString() )
-        formatSet = prim.GetVariantSet('format')
-        return formatSet.GetVariantSelection()
-
+    
     def GetFormats(self):
         from pxr import Usd, Sdf
 
@@ -919,14 +1085,39 @@ class SublayerBase(Base):
         versionSet.SetVariantSelection( self.GetVersionAsString() )
         formatSet = prim.GetVariantSet('format')
         return formatSet.GetVariantNames()
+    
+    def GetLatestFormat(self):
+        from pxr import Usd, Sdf
 
+        stage = Usd.Stage.Open( self.GetFilePath().AsString() )
+        prim = self.GetPrim(stage)
+        versionSet = prim.GetVariantSet('version')
+        versionSet.SetVariantSelection( self.GetVersionAsString() )
+        formatSet = prim.GetVariantSet('format')
+        return formatSet.GetVariantSelection()
+
+    # Layer
     def GetLayer(self):
         return Layer(path=self.data['layer'])
+    
+    def HasLayer(self):
+        return bool(self.data['layer'])
 
     def GetJob(self):
         return Job(self.GetJobPath().GetParent())
+    
+    def SetJob(self, job):
+        self.data['job'] = str(job)
+        self.SetPaths()
 
-    # Version #
+    # Version
+    def SetVersion(self, version):
+        if not isinstance(version, int):
+            version = String.versionAsInt(version)
+
+        self.data['version'] = version
+        self.SetPaths()
+
     def GetVersion(self, offset=0):
         if int(self.data['version']) == 0:
             files = Path.Glob( self.GetFilePattern('session') )
@@ -960,7 +1151,6 @@ class SublayerBase(Base):
     def GetVersionAsString(self, offset=0):
         return 'v{}'.format( str(self.GetVersion(offset)).zfill(3) )
 
-    # Versions #
     def GetVersions(self, fromDisk=False):
         if not self.GetFilePath().Exists():
             return []
@@ -1066,176 +1256,6 @@ class SublayerBase(Base):
             prim = stage.DefinePrim(primpath)
         return prim
 
-    # Create
-    def Create(self):
-        from pxr import Usd, Sdf, Kind, UsdGeom, UsdShade
-        from datetime import datetime
-        import getpass
-
-        if not self.GetPath():
-            raise Exception('Empty Path. Skipping Export.')
-
-        # Paths
-        abspath = self.GetFilePath('session').AsString()
-        relpath = './'+self.GetFilePath('session').GetRelative(-2).AsString()
-        outpath = relpath
-
-        # Main File
-        layer = USD.CreateOrOpen( self.GetFilePath() )
-
-        # Sublayer only if session is usd
-        if self.GetFormat().lower() in ['usd', 'usda'] and Path(abspath).Exists():
-            layer.subLayerPaths = [outpath]
-
-        # Set Custom Layer Data
-        self.SetCustomLayerData(layer)
-
-        if not self.GetFilePath('session').Exists():
-            return True
-
-        #layer.SetPerimissionToEdit(True)
-        stage = Usd.Stage.Open(layer.identifier)
-
-        # Version Variant
-        prim = self.GetPrim(stage)
-
-        versionSet = prim.GetVariantSets().AddVariantSet('version')
-        versionSet.AddVariant( self.GetVersionAsString() )
-        versionSet.SetVariantSelection( self.GetVersionAsString() )
-        with versionSet.GetVariantEditContext():
-            '''
-            modelAPI = Usd.ModelAPI(prim)
-            data = {}
-            data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
-            data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
-            data['user'] = getpass.getuser()
-            modelAPI.SetAssetInfo(data)
-            '''
-
-            formatSet = prim.GetVariantSets().AddVariantSet('format')
-            formatSet.AddVariant( self.GetFormat() )
-            formatSet.SetVariantSelection( self.GetFormat() )
-            with formatSet.GetVariantEditContext():
-                modelAPI = Usd.ModelAPI(prim)
-                data = {}
-                data['comment'] = self.data['comment'] if 'comment' in self.data.keys() else ''
-                data['name'] = self.GetFormat()
-                data['identifier'] = Sdf.AssetPath(outpath)
-                data['date'] = datetime.now().strftime('%a %d-%b-%y %H:%M:%S')
-                data['user'] = getpass.getuser()
-                if 'frameRange' in self.data.keys() and self.data['frameRange']:
-                    data['frameRange'] = True
-                    data['frameStart'] = self.data['frameRange'][0]
-                    data['frameEnd'] = self.data['frameRange'][1]
-                else:
-                    data['frameRange'] = False
-
-                modelAPI.SetAssetInfo(data)
-
-        layer.Save()
-
-        # Sublayer to shot
-        if self.__class__.__name__ == 'Sublayer':
-            layer = USD.FindOrOpen( self.GetLayer().GetFilePath() )
-            sublayerFile = './'+self.GetFilePath().GetHead()
-            if self.GetFormat().lower() in ['usd', 'usda']:
-                if sublayerFile not in layer.subLayerPaths:
-                    layer.subLayerPaths.append( sublayerFile )
-            layer.Save()
-
-    def CreateDummySession(self):
-        layer = USD.CreateOrOpen( self.GetFilePath('session') )
-        layer.Save()
-        
-class Asset(SublayerBase):
-    def __init__(self, path='', **kwargs):
-        SublayerBase.__init__(self, path, **kwargs)
-        self.SetPaths()
-
-    def SetPaths(self):
-        # Patterns
-        self.patterns['session'] = '{0}/{1}/{1}_v???.*'.format(self.GetRootPath(), self.GetName())
-        self.patterns['versions'] = '{0}/{1}/{1}_v???.*'.format(self.GetRootPath(), self.GetName())
-        self.patterns['formats'] = '{0}/{1}/{1}_{2}.*'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString())
-        self.patterns['range'] = '{0}/{1}/{1}_{2}/{1}_v???.*.{3}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetFormat())
-        self.patterns['children'] = '{0}/{1}/*.usda*'.format( self.GetRootPath(), self.GetName() )
-
-        self.paths['main'] = '{0}/{1}.usda'.format(self.GetRootPath(), self.GetName())
-        self.paths['session'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetFormat() )
-        self.paths['latest'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(-1), self.GetFormat() )
-        self.paths['range'] = '{0}/{1}/{1}_{2}/{1}_{2}.{3}.{4}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), '{}', self.GetFormat() )
-        self.paths['thumbnail'] = '{0}/{1}.png'.format( self.GetRootPath(), self.GetName() )
-
-    def GetRootPath(self):
-        outpath = self.GetJobPath() + 'assets'
-        outpath+= self.GetPath().GetParent()
-        return outpath
-
-    def GetChildrenByFilter(self, path):
-        path = path.replace('//', '/')
-
-        children = []
-        asset = Asset( job=self.data['job'] )
-        searchpath = asset.GetRootPath().AsString() + path + '*.usda'
-        files = Path.Glob( searchpath )
-
-        return [ f.GetFileName() for f in files ]
-
-    def HasChildren(self):
-        return len(self.GetChildren()) > 0
-
-    def GetChildren(self):
-        if self.data['path'] == '':
-            return self.GetJob().GetAssets()
-
-        if not self.GetFilePath().Exists():
-            return []
-
-        children = []
-        layer = USD.OpenAsAnonymous(self.GetFilePath())
-        for sublayer in layer.subLayerPaths:
-            sublayer = Path(sublayer)
-            if not sublayer.HasVersion():
-                children.append( sublayer.GetFileName() )
-        return children
-
-    def Create(self):
-        SublayerBase.Create(self)
-
-        if self.GetPath().HasParent():
-            parent = Asset( self.GetPath().GetParent(), job=self.GetJob().GetDir() )
-
-            if not parent.Exists():
-                parent.Create()
-
-            layer = USD.CreateOrOpen( parent.GetFilePath() )
-            relpath = './'+self.GetFilePath().GetRelative(-2).AsString()
-            if relpath not in layer.subLayerPaths:
-                layer.subLayerPaths.insert(0, relpath)
-            layer.Save()
-
-    def JsonEncode(self, usd=False):
-        data = SublayerBase.JsonEncode(self)
-
-        data['format'] = self.GetFormat()
-        data['children'] = self.GetChildren()
-        data['hasChildren'] = len(data['children'])
-        data['parent'] = self.GetPath().GetParent().AsString()
-        data['hasParent'] = self.GetPath().HasParent()
-
-        data['versions'] = [ (v, String.versionAsString(v)) for v in self.GetVersions(fromDisk=True) ]
-        data['hasVersion'] = len(data['versions']) > 0
-        data['version'] = self.GetVersion()
-        data['versionAsString'] = self.GetVersionAsString()
-
-        data['formats'] = []
-        if usd:
-            data['usd'] = self.GetAssetInfo()
-
-        if False:
-            print('### Asset ###')
-            String.pprint(data)
-            print('#############')
-        return data
+    # Other
 
 conf = Config().Load()
