@@ -5,10 +5,11 @@ print(sys.version)
 print('')
 print('##')
 
-job = nerve.Job()
-if job.Exists():
-    job.Delete()
-job.Create()
+def NewJob():
+    job = nerve.Job()
+    if job.Exists():
+        job.Delete()
+    job.Create()
 
 def PathTests():
     # Expand Environmental Variable
@@ -275,16 +276,11 @@ def LibTests():
 
 def AppTests():
     import nerve.apps
-    path = 'C:/testProj'
-    if nerve.Path(path).Exists():
-        nerve.Path(path).Remove(True)
+    job = nerve.Job()
 
     apps = ['maya', 'houdini']
-    for a in apps:
-        app = getattr(nerve.apps, a)(path)
-
-
-
+    for appname in apps:
+        app = getattr(nerve.apps, appname)(job.GetDir())
         app.Create()
 
 def JobTests():
@@ -304,15 +300,20 @@ def JobTests():
     job.Create()
     assert job.Exists() is True
 
+def FormatTests():
+    pass
+
+NewJob()
+#FormatTests()
 #PathTests()
 #ImageTests()
 #JobTests()
-AssetTests()
+#AssetTests()
 #LayerTests()
 #SublayerTests()
 #AssetTests()
 #LibTests()
-#AppTests()
+AppTests()
 
 
 #print('#')

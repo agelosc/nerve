@@ -1,72 +1,80 @@
 import sys
 import nerve
 import shutil, subprocess
-APP_DIR = nerve.Path(__file__).GetParent(3) + 'apps'
 
+APP_DIR = nerve.Path(__file__).GetParent(3) + 'apps'
 
 class Base:
     def __init__(self):
-        #
-        self.data['appath'] = self.data['path'] + self.data['name']
-        self.data['cmdpath'] = self.data['appath'] + (self.data['name'] + '.cmd')
-        self.data['cmdpath'].SetContent( self.LoadCmd() )
+        self.data = {}
+
+    def GetAppPath(self):
+        return nerve.Path(self.data['job']) + self.data['name']
+
+    def GetJob(self):
+        return nerve.Job( self.data['job'] )
+
+    def GetCmd(self):
+        return self.GetAppPath() + (self.data['name'] + '.cmd')
 
     def Create(self):
-
-        job = nerve.Job(self.data['path'])
+        job = self.GetJob()
         if not job.Exists():
             job.Create()
 
-        if not self.data['appath'].Exists():
-            self.data['appath'].Create()
+        if not self.GetAppPath().Exists():
+            self.GetAppPath().Create()
 
         template = APP_DIR + self.data['name'] + 'template'
-        if template.Exists():
-            if sys.version_info > (3,8):
-                shutil.copytree( template.AsString(), self.data['appath'].AsString(), dirs_exist_ok=True)
-            else:
-                for file in nerve.Path.Glob( template + '/*'):
-                    target = nerve.Path(file.Replace(template, self.data['appath']))
-                    if not target.Exists():
-                        if target.IsFile():
-                            shutil.copyfile(str(file), str(target))
-                        else:
-                            shutil.copytree( str(file), str(target) )
+        if not template.Exists():
+            return None
 
+        if sys.version_info > (3,8):
+            shutil.copytree( template.AsString(), self.GetAppPath().AsString(), dirs_exist_ok=True)
+        else:
+            for file in nerve.Path.Glob( template + '/*'):
+                target = nerve.Path(file.Replace(template, self.GetAppPath()))
+                if not target.Exists():
+                    if target.IsFile():
+                        shutil.copyfile(str(file), str(target) )
+                    else:
+                        shutil.copytree( str(file), str(target) )
 
-            self.data['cmdpath'].Create()
+        cmdfile = self.GetCmd()
+        cmdfile.SetContent( self.LoadCmd() )
+        cmdfile.Create()
 
     def Load(self):
-        if not self.data['appath'].Exists():
+        if not self.GetAppPath().Exists():
             self.Create()
-        subprocess.Popen( [self.data['cmdpath'].AsString()], stdout=subprocess.PIPE, stderr=subprocess.STDOUT  )
+        subprocess.Popen( [str(self.GetCmd())], stdout=subprocess.PIPE, stderr=subprocess.STDOUT  )
+    
 
 class houdini(Base):
-    def __init__(self, path):
-        self.data = {}
-        self.data['path'] = nerve.Path(path)
-        self.data['name'] = 'houdini'
+    def __init__(self, jobpath):
         Base.__init__(self)
+        self.data['job'] = nerve.Path(jobpath)
+        self.data['name'] = 'houdini'
+        
 
     def LoadCmd(self):
         txt = '@echo off\n'
-        txt+= 'set JOB={}\n'.format(self.data['path'])
+        txt+= 'set JOB={}\n'.format(self.GetJob())
         txt+= 'set HOUDINI_VERSION=19.0.383\n'
         txt+= 'set HOUDINI_PACKAGE_DIR=%NERVE_LOCAL_PATH%/houdini/packages\n'
         txt+= 'start "" "C:/Program Files/Side Effects Software/Houdini %HOUDINI_VERSION%/bin/houdinifx.exe"\n'
         return txt
 
 class maya(Base):
-    def __init__(self, path):
-        self.data = {}
-        self.data['path'] = nerve.Path(path)
-        self.data['name'] = 'maya'
+    def __init__(self, jobpath):
         Base.__init__(self)
+        self.data['job'] = nerve.Path(jobpath)
+        self.data['name'] = 'maya'
 
     def LoadCmd(self):
         txt = '@echo off\n'
-        txt+= 'set JOB={}\n'.format(self.data['path'])
-        txt+= 'set MAYA_PROJECT={}\n'.format(self.data['appath'])
+        txt+= 'set JOB={}\n'.format(self.GetJob())
+        txt+= 'set MAYA_PROJECT={}\n'.format(self.GetAppPath())
         txt+= 'set MAYA_MODULE_PATH=%MAYA_MODULE_PATH%;%NERVE_LOCAL_PATH%/maya\n'
         txt+= 'start "" "C:/Program Files/Autodesk/Maya2022/bin/maya.exe" -command nerve\n'
         return txt

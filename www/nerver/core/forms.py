@@ -61,7 +61,7 @@ class job_add(forms.Form):
 class asset_add(forms.Form):
     job = forms.CharField(label="Job")
     path = forms.CharField( label='Path')
-    name = forms.CharField(label='Name')
+    #name = forms.CharField(label='Name')
     file = forms.CharField(label="File")
 
     FORMATS = (("One", "one"), ("Two", "two"))

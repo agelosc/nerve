@@ -122,9 +122,6 @@ class Menu:
 
         job = nerve.maya.Job(dir[0])
         job.Create()
-        job.AddToRecent( job.GetDir() )
-        app = nerve.apps.maya(job.GetDir())
-        app.Create()
 
         job.Set( job.GetDir() )
         cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()))

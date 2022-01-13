@@ -93,7 +93,7 @@ def menu():
 def deferred():
     gMainWindow = mel.eval('global string $gMainWindow; $temp1=$gMainWindow;')
     if gMainWindow != '':
-        print "NERVE 6::Loading UI..."
+        print("NERVE 6::Loading UI...")
 
         import UI
         UI.Menu()
@@ -154,6 +154,8 @@ class Format:
     data['fbx'] = 'FBX'
     data['obj'] = 'OBJ'
     data['rs'] = 'RedshiftProxy'
+    #data['mat'] = 'Material'
+    data['hdr'] = 'HDRI'
 
     @classmethod
     def GetObject(cls, format):
@@ -200,6 +202,17 @@ class Job(nerve.Job):
         os.environ['JOB'] = job.GetDir()
         cmds.workspace(proj.AsString(), openWorkspace=True)
         print('Project set to {}.'.format(proj)),
+        return True
+
+    def Create(self):
+        # Create Job
+        nerve.Job.Create(self)
+        # Add To Recent Jobs
+        self.AddToRecent(self.GetDir())
+        # Create app directories
+        app = nerve.apps.maya( self.GetDir() )
+        app.Create()
+
         return True
 
 class Base:
@@ -765,8 +778,8 @@ class USDBase(Base):
     def Reference(self, file, **kwargs):
         options = {}
         options['readAnimData'] = "1"
-        if 'frameRange' in kwargs.keys():
-            options['frameRange'] = '({},{})'.format(frameRange[0], frameRange[1])
+       # if 'frameRange' in kwargs.keys():
+        #    options['frameRange'] = '({},{})'.format(frameRange[0], frameRange[1])
 
         args = {}
         args['type'] = 'USD Import'
@@ -780,8 +793,8 @@ class USDBase(Base):
         args = {}
         args['file'] = file
         args['readAnimData'] = True
-        if 'frameRange' in kwargs.keys():
-            args['frameRange'] = frameRange
+        #if 'frameRange' in kwargs.keys():
+        #    args['frameRange'] = frameRange
 
         cmds.mayaUSDImport(**args)
 
@@ -817,3 +830,19 @@ class USD(USDBase):
     def __init__(self, **kwargs):
         USDBase.__init__(self, **kwargs)
         self.type = 'USD'
+
+'''
+class HDRI(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+
+        self.GatherMethods = ['DomeLight', 'Replace']
+
+class Material(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+        self.GatherMethods = ['Import', 'Replace']
+
+    def Import(self, file, **kwargs):
+        pass
+'''        

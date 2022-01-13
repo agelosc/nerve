@@ -77,7 +77,7 @@ def job(request, job):
     return render(request, "job.html", context)
 
 def asset(request, asset):
-    return HttpRsonse('')
+    return HttpResponse('')
     #return render(request, "asset.html", {})
 
 def assets(request):

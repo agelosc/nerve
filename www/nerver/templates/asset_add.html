@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% load static %}
-{% load crispy_forms_tags %}
 
 {% block head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.1/font/bootstrap-icons.css">
@@ -27,12 +26,6 @@
         {% with field=form.path val=GET.path%}
           <label for="{{ field.id_for_label }}">{{ field.label }}</label>
 					<input type="text" class="form-control" name="{{ field.name }}"  value="{{val}}" />
-        {% endwith %}
-
-        <!-- Name -->
-        {% with field=form.name %}
-          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-          <input type="text" class="form-control" name="{{ field.name }}" />
         {% endwith %}
 
         <!-- Asset File(s) -->
