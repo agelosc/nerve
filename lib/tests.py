@@ -330,7 +330,10 @@ def FormatTests():
 
 
 def HDRITests():
-    pass
+    hdri = nerve.HDRI('hdri')
+    hdri.Export('C:/users/lemon/Desktop/sunset.hdr')
+
+    print('# Passed All HDRI tests')
 
 NewJob()
 

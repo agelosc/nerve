@@ -831,18 +831,7 @@ class USD(USDBase):
         USDBase.__init__(self, **kwargs)
         self.type = 'USD'
 
-'''
-class HDRI(Base):
-    def __init__(self, **kwargs):
-        Base.__init__(self, **kwargs)
+class HDRI(nerve.HDRI):
+    pass
 
-        self.GatherMethods = ['DomeLight', 'Replace']
 
-class Material(Base):
-    def __init__(self, **kwargs):
-        Base.__init__(self, **kwargs)
-        self.GatherMethods = ['Import', 'Replace']
-
-    def Import(self, file, **kwargs):
-        pass
-'''        

@@ -975,14 +975,14 @@ class Asset(Base):
         self.patterns['session'] = '{0}/{1}/{1}_v???.*'.format(self.GetRootPath(), self.GetName())
         self.patterns['versions'] = '{0}/{1}/{1}_v???.*'.format(self.GetRootPath(), self.GetName())
         self.patterns['formats'] = '{0}/{1}/{1}_{2}.*'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString())
-        self.patterns['range'] = '{0}/{1}/{1}_{2}/{1}_v???.*.{3}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetFormat())
+        self.patterns['range'] = '{0}/{1}/{1}_{2}/{1}_v???.*.{3}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetExtension())
         self.patterns['children'] = '{0}/{1}/*.usda*'.format( self.GetRootPath(), self.GetName() )
 
         # Paths
         self.paths['main'] = '{0}/{1}.usda'.format(self.GetRootPath(), self.GetName())
-        self.paths['session'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetFormat() )
-        self.paths['latest'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(-1), self.GetFormat() )
-        self.paths['range'] = '{0}/{1}/{1}_{2}/{1}_{2}.{3}.{4}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), '{}', self.GetFormat() )
+        self.paths['session'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetExtension() )
+        self.paths['latest'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(-1), self.GetExtension() )
+        self.paths['range'] = '{0}/{1}/{1}_{2}/{1}_{2}.{3}.{4}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), '{}', self.GetExtension() )
         self.paths['thumbnail'] = '{0}/{1}.png'.format( self.GetRootPath(), self.GetName() )
 
     def GetRootPath(self):
@@ -1119,6 +1119,15 @@ class Asset(Base):
         versionSet.SetVariantSelection( self.GetVersionAsString() )
         formatSet = prim.GetVariantSet('format')
         return formatSet.GetVariantSelection()
+
+    def GetExtension(self):
+        if 'ext' in self.data.keys():
+            return self.data['exr']
+        return self.GetFormat()
+
+    def SetExtension(self, ext):
+        self.data['ext'] = ext
+        self.SetPaths()
 
     # Layer
     def GetShot(self):
@@ -1303,9 +1312,16 @@ class HDRI(Asset):
 
         if not source.Exists():
             raise Exception('error reading file {}'.format(source))
+
+        if not self.GetFilePath('session').GetParent().Exists():
+            self.GetFilePath('session').GetParent().Create()
         
-        shutil.copyfile(str(source), self.GetFilePath('session'))
+        shutil.copyfile(str(source), str(self.GetFilePath('session')))
         self.Create()
+
+
+    
+
 
         
 
