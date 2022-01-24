@@ -2,6 +2,10 @@ import maya.cmds as cmds
 
 import nerve
 import nerve.maya.UI
+try:
+    from importlib import reload
+except:
+    pass
 reload(nerve.maya.UI)
 
 # Utilities
@@ -158,12 +162,13 @@ def snap():
     cmds.select(sel[0], r=True)
     print('Snapped {} to {}.'.format(sel[0], sel[1])),
 
-def scatter():
+def scatter(name=None):
     if not cmds.pluginInfo('MASH', q=True, l=True):
         cmds.loadPlugin('MASH')
-    name = nerve.maya.UI.Dialog.Input(title='Scatter Name')
     if not name:
-        return False
+        name = nerve.maya.UI.Dialog.Input(title='Scatter Name')
+        if not name:
+            return False
 
     sel = cmds.ls(sl=True, l=True)
 
@@ -183,7 +188,7 @@ def scatter():
     for attr in ['position', 'rotation', 'scale']:
         for a in ['X', 'Y', 'Z']:
             data[attr+a] = 0
-            #cmds.setAttr(rand + '.{}{}'.format(attr, a), 0)
+            cmds.setAttr(rand + '.{}{}'.format(attr, a), 0)
     data = {'absoluteScale':True, 'uniformRandom':True, 'transformationSpace':2}
     for key,val in data.items():
         cmds.setAttr(rand + '.'+key, val)
@@ -210,8 +215,78 @@ def scatter():
     if len(sel):
         cmds.setAttr(id+'.numObjects', len(sel))
 
+    cmds.select(inst, r=True)
+    nerve.maya.UI.Scatter()
+
 def scatterUI():
     nerve.maya.UI.Scatter()
+
+def copyTransform():
+    import json
+    attribs = []
+    for name in ['translate', 'rotate', 'scale']:
+        for axis in ['X', 'Y', 'Z']:
+            attribs.append( name + axis)
+
+    sel = cmds.ls(sl=True, l=True)
+    if not len(sel):
+        cmds.warning('Nothing selected')
+        return False
+    
+    if cmds.nodeType(sel[0]) != 'transform':
+        cmds.warning('Selection is not a transform.')
+        return False
+
+    data = {}
+    for attrib in attribs:
+        data[attrib] = cmds.getAttr(sel[0] + '.' + attrib)
+
+    filepath = nerve.Path('$TEMP/nerve/transform.json')
+    with open(str(filepath), 'w') as outfile:
+        json.dump(data, outfile)
+
+def pasteTransform():
+    import json
+    filepath = nerve.Path('$TEMP/nerve/transform.json')
+    if not filepath.Exists():
+        cmds.warning('Transform not found on clipboard')
+        return False
+
+    sel = cmds.ls(sl=True, l=True)
+    if not len(sel):
+        cmds.warning('Nothing selected')
+        return False
+    
+    if cmds.nodeType(sel[0]) != 'transform':
+        cmds.warning('Selection is not a transform.')
+        return False     
+
+    with open(str(filepath)) as json_file:
+        data = json.load(json_file)
+
+    for key,val in data.items():
+        cmds.setAttr(sel[0] + '.' + key, val)
+
+def deinstance():
+
+    import maya.OpenMaya as om
+
+    def getInstances():
+        instances = []
+        iterDag = om.MItDag(om.MItDag.kBreadthFirst)
+        while not iterDag.isDone():
+            instanced = om.MItDag.isInstanced(iterDag)
+            if instanced:
+                instances.append(iterDag.fullPathName())
+            iterDag.next()
+        return instances   
+
+    instances = getInstances()
+    while len(instances):
+        parent = cmds.listRelatives(instances[0], parent=True, fullPath=True)[0]
+        cmds.duplicate(parent, renameChildren=True)
+        cmds.delete(parent)
+        instances = getInstances()         
 
 # Redshift
 def rsRelease():
@@ -388,7 +463,7 @@ def localRender():
     cmd = ''
     for frames in FrameList:
         cmd+= '"{0}" {1} -s {2} -e {3} -b 1 -rd "{4}" "{5}"\n'.format(mayaPath, rendererFlags, frames[0], frames[1], renderPath, scene)
-    print cmd
+    print(cmd)
 
     batfilepath = os.environ["TEMP"] + '/localRender.bat'
     batfile = open(batfilepath, 'w')

@@ -183,10 +183,13 @@ class Menu:
             itm('Duplicate', parent, nerve.maya.tools.duplicate)
             itm('Instance', parent, nerve.maya.tools.instance)
             itm('Duplicate With Input Graph', parent, nerve.maya.tools.duplicateInputGraph)
+            itm('Import All Instances', parent, nerve.maya.tools.deinstance)
             sep('Scatter', parent)
             itm('Create Scatter...', parent, nerve.maya.tools.scatter)
             itm('Scatter UI', parent, nerve.maya.tools.scatterUI)
             sep('Locators', parent)
+            itm('Copy Transform', parent, nerve.maya.tools.copyTransform)
+            itm('Paste Transform', parent, nerve.maya.tools.pasteTransform)
             itm('Snap Location', parent, nerve.maya.tools.snap)
             itm('Locator To Pivot', parent, nerve.maya.tools.locatorToPivot)
             itm('Locator To Average', parent, nerve.maya.tools.locatorToAverage)
@@ -262,7 +265,6 @@ class Base:
 
         kwargs = self.SetDefaults(defaults, **kwargs)
         return cmds.iconTextButton(**kwargs)
-        #return cmds.image(image=defaults['image'])
 
     def textScrollList(self, **kwargs):
         defaults = {}
@@ -397,7 +399,8 @@ class Manager(Base):
         if True: # Lists
             cmds.rowLayout(numberOfColumns=4)
             #self.text('')
-            self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.SelectPath, doubleClickCommand=self.EnterPath)
+            #self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.SelectPath, doubleClickCommand=self.EnterPath)
+            self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.EnterPath)
             self.ctrl['versionlist'] = self.textScrollList(width=82, selectCommand=self.Refresh)
             self.ctrl['formatlist'] = self.textScrollList(width=200, allowMultiSelection=True, selectCommand=self.Refresh)
             cmds.setParent('..')
@@ -568,7 +571,8 @@ class Manager(Base):
         asset = nerve.Asset(**args)
 
         latestFormat = asset.GetLatestFormat()
-        cmds.textField(self.ctrl['latest'], e=True, text= nerve.maya.Format.GetLong( latestFormat ))
+        cmds.textField(self.ctrl['latest'], e=True, text=nerve.Format(latestFormat).GetLong())
+
 
         # Selected Formats
         if not len(formatlist):
@@ -577,7 +581,7 @@ class Manager(Base):
         format = latestFormat
         formats_all = asset.GetFormats()
 
-        for f in [nerve.maya.Format.GetShort(f) for f in formatlist]:
+        for f in [nerve.Format(f).GetName() for f in formatlist]:
             if f in formats_all:
                 format = f
                 break
@@ -607,8 +611,8 @@ class Manager(Base):
         args['version'] = version
         asset = nerve.Asset(**args)
 
-        formats_asset = [nerve.maya.Format.GetLong(f) for f in asset.GetFormats()]
-        formats_all = nerve.maya.Format.GetAllLong() if self.GetData('action') == 'release' else formats_asset
+        formats_asset = [nerve.Format(f).GetLong() for f in asset.GetFormats()]
+        formats_all = nerve.Format.All(long=True) if self.GetData('action') == 'release' else formats_asset
 
         # Create textScrollList arguments
         args = {'edit':True}
@@ -708,6 +712,16 @@ class Manager(Base):
             return False
 
         path = self.GetData('path')
+
+        # Asset
+        args = {}
+        args['job'] = self.GetData('job')
+        args['path'] = path + sel[0]
+        asset = nerve.Asset(**args)
+        if not asset.HasChildren() and sel[0] != '..': 
+            self.SelectPath()
+            return False
+
         if sel[0] == '..':
             path = nerve.Path(path).GetParent().AsString() + '/'
             cmds.textField(self.ctrl['path'], e=True, text=path.lstrip('/'))
@@ -765,48 +779,56 @@ class Manager(Base):
         args = {}
         for key in ['path', 'job', 'version', 'description', 'comment']:
             args[key] = self.GetData(key)
-        asset = nerve.Asset(**args)
 
-        for format in self.GetData('formats'):
-            asset.SetFormat( nerve.maya.Format.GetShort(format) )
+        # Release
+        if self.GetData('action') == 'release':
+            sel = cmds.ls(sl=True, l=True)
+            if not len(sel):
+                print('Nothing Selected. Skipping release...'),
+                return False
 
-            if self.GetData('action') == 'release':
-                # Transform
-                sel = cmds.ls(sl=True, l=True)
-                xforms = []
+            xforms = []
+            if self.GetData('transform') == 2:
+                for n in sel:
+                    xforms.append( self.GetTransform(n))
+                    self.ResetTransform(n)
 
-                if not len(sel):
-                    print('Nothing Selected. Skipping release...'),
-                    return False
+            tmp = nerve.Asset(**args)
+            args['version'] = tmp.GetVersion()
+            for format in self.GetData('formats'):
+                args['format'] = nerve.Format(format).GetName()    
+                asset = nerve.maya.asset( **args )
 
-                if self.GetData('transform') == 2:
-                    for n in sel:
-                        xforms.append( self.GetTransform(n) )
-                        self.ResetTransform(n)
-
-                nerve.maya.ReleaseUI(asset.GetFilePath('session'))
+                if hasattr(asset, 'ReleaseUI'):
+                    asset.ReleaseUI()
+                else:
+                    asset.Release()
                 asset.Create()
 
-                # Set Transform
-                if self.GetData('transform') == 2:
-                    for i in range(len(sel)):
-                        n = sel[i]
-                        xform = xforms[i]
-                        self.SetTransform(n, xform)
+            cover = nerve.Path(self.GetData('cover'))
+            if cover.Exists():
+                asset.SetCover(cover)
+            
+            if self.GetData('transform') == 2:
+                for i in range(len(sel)):
+                    n = sel[i]
+                    xform = xforms[i]
+                    self.SetTransform(n, xform)
 
-                cover = nerve.Path(self.GetData('cover'))
-                if cover.Exists():
-                    asset.SetCover(cover)
+            Dialog.Confirm('Asset Released.')
+            return True
+            
+        # Gather
+        if self.GetData('action') == 'gather':
+            format = self.GetData('formats')[0]
+            args['format'] = nerve.Format(format).GetName()
+            asset = nerve.maya.asset(**args)
 
-
+            if hasattr(asset, 'GatherUI'):
+                asset.GatherUI()
             else:
-                nerve.maya.GatherUI(asset.GetFilePath('session'))
-
-        if self.GetData('action') == 'release':
-            #msg = 'Asset released.\n{}\n{}'.format(args['path'].rstrip('/'), '\n'.join(self.GetData('formats')))
-            msg = 'Asset Released.'
-            Dialog.Confirm(msg)
-
+                asset.Gather()
+            
 
         self.Refresh({})
 
@@ -950,7 +972,7 @@ class Scatter(Base):
                     for attr in ['rotationX', 'rotationY', 'rotationZ']:
                         if True:
                             cmds.rowLayout(numberOfColumns=2)
-                            self.text(attr.capitalize())
+                            self.text(attr)
                             node = self.GetRandNode()
                             cmd = partial(self.updateFloat, attr, node )
                             value = cmds.getAttr(node+'.'+attr)
@@ -1037,7 +1059,7 @@ class Scatter(Base):
 
         mesh = sel[0]
         if cmds.nodeType(mesh) == 'transform':
-            mesh = cmds.listRelatives(mesh, s=True) or []
+            mesh = cmds.listRelatives(mesh, fullPath=True, s=True) or []
             mesh = mesh[0]
 
         if cmds.nodeType(mesh) != 'mesh':
@@ -1047,6 +1069,7 @@ class Scatter(Base):
         dist = self.GetDistNode()
         cmds.setAttr(dist + '.arrangement', 4)
         cmds.connectAttr(mesh+'.worldMesh', dist + '.inputMesh', f=True)
+        cmds.setAttr(dist + '.areaBasedScatter', True)
 
         cmds.textField(self.ctrl['geo'], e=True, text=self.GetGeometry())
 
@@ -1055,7 +1078,7 @@ class Scatter(Base):
         return items
 
     def GetNode(self, type, origin):
-        history = cmds.listHistory(origin, allConnections=True)
+        history = cmds.listHistory(origin, allConnections=True, pruneDagObjects=True)
         for h in history:
             if cmds.nodeType(h) == type:
                 return h

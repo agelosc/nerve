@@ -634,6 +634,49 @@ class USD:
         stage.SetDefaultPrim(prim)
         layer.Save()
 
+class Format:
+    formats = {}
+    formats['usd'] = 'USD'
+    formats['abc'] = 'Alembic'
+    formats['mb'] = 'MayaBinary'
+    formats['ma'] = 'MayaAscii'
+    formats['fbx'] = 'FBX'
+    formats['obj'] = 'OBJ'
+    formats['rs'] = 'RedshiftProxy'
+
+    formats['hdr'] = 'HDRI'
+
+    def __init__(self, format):
+        for key in self.formats.keys():
+            if format.lower() == key:
+                self.name = key
+                self.long = self.formats[key]
+                return None
+
+        for key,val in self.formats.items():
+            if format == val:
+                self.name = key
+                self.long = val
+                return None
+
+        raise Exception('Format {} Not Found.'.format(format))
+        
+    def GetLong(self):
+        return self.long
+    
+    def SetLong(self, long):
+        self.long = long
+
+    def GetName(self):
+        return self.name
+
+    @classmethod
+    def All(cls, long=False):
+        if long:
+            return [val for key,val in cls.formats.items()]
+
+        return cls.formats.keys()
+
 class Base:
     def __init__(self, **kwargs):
         for attr in ['data', 'paths', 'patterns']:
@@ -815,6 +858,18 @@ class Job(Base):
         else:
             conf['local'][key] = [ path ]
         conf.SetLocalData()
+
+    @staticmethod
+    def RemoveFromRecents(path):
+        path = Path(path)
+        if str(path) in conf['local']['recentJobs']:
+            conf['local']['recentJobs'].remove(str(path))
+            conf.SetLocalData()
+            print('Job {} removed from recents'.format(path)),
+            return True
+
+        print('Job {} not found in recents. Skipping...'.format(path)),
+        return True
 
     @staticmethod
     def GetRecent():
@@ -1036,6 +1091,9 @@ class Asset(Base):
         outpath = relpath
 
         # Main File
+        if not self.GetFilePath().GetParent().Exists():
+            self.GetFilePath().GetParent().Create()
+
         layer = USD.CreateOrOpen( self.GetFilePath() )
 
         # Sublayer only if session is usd
@@ -1230,10 +1288,20 @@ class Asset(Base):
         stage = Usd.Stage.Open( layer.identifier )
         prim = self.GetPrim(stage)
         modelAPI = Usd.ModelAPI(prim)
+
+        variants = prim.GetVariantSets()
+        if not variants.HasVariantSet('version'):
+            versionSet = variants.AddVariantSet('version')
         versionSet = prim.GetVariantSet('version')
+        if not versionSet.HasAuthoredVariant( self.GetVersionAsString() ):
+            versionSet.AddVariant( self.GetVersionAsString() )
         versionSet.SetVariantSelection( self.GetVersionAsString() )
         with versionSet.GetVariantEditContext():
+            if not variants.HasVariantSet('format'):
+                formatSet = variants.AddVariantSet('format')
             formatSet = prim.GetVariantSet('format')
+            if not formatSet.HasAuthoredVariant( self.GetFormat() ):
+                formatSet.AddVariant( self.GetFormat() )
             formatSet.SetVariantSelection( self.GetFormat() )
             with formatSet.GetVariantEditContext():
                 modelAPI = Usd.ModelAPI(prim)
@@ -1273,7 +1341,7 @@ class Asset(Base):
     # Prim
     def GetPrimPath(self):
         name = self.GetName()
-        return '/nerve/{}s/{}'.format(self.__class__.__name__, name)
+        return '/nerve/Assets/{}'.format(name)
 
     def GetPrim(self, stage=None):
         from pxr import Usd
@@ -1286,22 +1354,52 @@ class Asset(Base):
         return prim
 
     # Gather/Release
-    def AddReleaseMethod(self, name):
-        if name not in self.release:
-            self.release.append(name)
+    def AddReleaseMethod(self, *args):
+        for arg in args:
+            if arg not in self.release:
+                self.release.append(arg)
 
-    def AddGatherMethod(self, name):
-        if name not in self.gather:
-            self.gather.append(name)
+    def AddGatherMethod(self, *args):
+        for arg in args:
+            if arg not in self.gather:
+                self.gather.append(arg)
+
+    def Release(self, _name=None, **kwargs):
+        if not len(self.release):
+            Exception('Asset object does not have any release methods.')
+
+        if _name is None:
+            if 'releaseMethod' in self.data.keys():
+                _name = self.data['_releaseMethod']
+            else:            
+                return getattr(self, self.release[0])(**kwargs)
+        
+        if _name not in self.release:
+            Exception('Asset object does not have a {} release method.'.format(_name))
+
+        return getattr(self, _name)(**kwargs)
+
+    def Gather(self, _name=None, **kwargs):
+        if not len(self.gather):
+            Exception('Asset object does not have any gather methods.')
+
+        if _name is None:
+            if 'gatherMethod' in self.data.keys():
+                _name = self.data['gatherMethod']
+            else:
+                return getattr(self, self.gather[0])(**kwargs)
+        
+        if _name not in self.gather:
+            Exception('Asset object does not have a {} gather method.'.format(_name))
+
+        return getattr(self, _name)(**kwargs)
 
 conf = Config().Load()
 
 class HDRI(Asset):
     def __init__(self, path='', **kwargs):
+        kwargs['format'] = 'hdr'
         Asset.__init__(self, path, **kwargs)
-
-        self.SetFormat('hdr')
-        
         self.AddReleaseMethod('Export')
         
     def Export(self, source):

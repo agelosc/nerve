@@ -7,6 +7,8 @@ import maya.cmds as cmds
 import maya.mel as mel
 import maya.utils as mu
 
+nerve.conf['formats']+= ['RedshiftProxy']
+
 class Path(nerve.Path):
     def __init__(self, path):
         nerve.Path.__init__(self, path, '|')
@@ -73,49 +75,117 @@ class Node(nerve.Node):
     def Exists(self):
         return cmds.objExists(self.data['path'])
 
-    @staticmethod
-    def GetSelectedNodes():
-        sel = cmds.ls(sl=True, l=True)
-        nodes = []
-        for n in sel:
-            nodes.append( Node.node(n) )
+def GetSelectedNodes():
+    sel = cmds.ls(sl=True, l=True)
+    nodes = []
+    for n in sel:
+        nodes.append( node(n) )
 
-        return nodes
+    return nodes
 
-    @staticmethod
-    def node(path):
-        node = Node()
-        node.SetDataFromScene(path)
-        return node
+def node(path):
+    node = Node()
+    node.SetDataFromScene(path)
+    return node
 
 def menu():
     print("NERVE::Initialising...")
     mu.executeDeferred('gNerve = nerve.maya.deferred();')
 
 def deferred():
-    #Menu
     gMainWindow = mel.eval('global string $gMainWindow; $temp1=$gMainWindow;')
     if gMainWindow != '':
         print("NERVE 6::Loading UI...")
+
         import UI
         UI.Menu()
-    
-    # Set Job
-    workspace = nerve.Path(cmds.workspace(q=True, o=True))
-    dir = workspace.GetParent()
-    job = Job(dir)
-    if job.Exists():
-        job.Set(dir)
 
-def asset(**kwargs):
-    if 'format' not in kwargs.keys():
-        raise Exception('format not specified.')
-    
-    format = nerve.Format(kwargs['format']).GetLong()
-    if not hasattr(sys.modules[__name__], format):
-        raise Exception('Invalid Format {}'.format(format))
+def Release(file, **kwargs):
+    file = nerve.Path(file)
 
-    return getattr(sys.modules[__name__], format)(**kwargs)
+    sel = cmds.ls(sl=True, l=True)
+    if not len(sel):
+        cmds.warning('Nothing selected. Skipping Release...')
+        return False
+    obj = Format.GetObject(file.GetExtension().lower())()
+
+    if not file.GetParent().Exists():
+        file.GetParent().Create()
+    obj.Export(file, **kwargs)
+
+    print('## NERVE ## asset exported: {}'.format(file))
+
+def ReleaseUI(file):
+    file = nerve.Path(file)
+    ext = file.GetExtension().lower()
+    obj = Format.GetObject( ext )()
+    if hasattr(obj, 'ReleaseUI'):
+        result = cmds.layoutDialog(ui=obj.ReleaseUI, title=Format.GetLong( ext ) )
+        if result == 'Cancel' or result == 'dismiss':
+            return False
+
+    Release(file, **obj.data)
+
+def GatherUI(file):
+    file = nerve.Path(file)
+    obj = Format.GetObject( file.GetExtension().lower() )()
+    result = cmds.layoutDialog(ui=obj.GatherUI)
+    if result == 'Cancel' or result == 'dismiss':
+        return False
+
+    if 'mode' not in obj.data.keys():
+        obj.data['mode'] = obj.GatherMethods[0]
+
+    Gather(file, **obj.data)
+
+def Gather(file, mode='reference', **kwargs):
+    mode = mode.capitalize()
+    file = nerve.Path(file)
+    obj = Format.GetObject( file.GetExtension().lower() )()
+    if hasattr(obj, mode):
+        getattr(obj, mode)(file, **kwargs)
+    print("object attribute \"{}\" does not exist.".format(mode))
+
+class Format:
+    data = {}
+    #data['usda'] = 'USDAscii'
+    data['usd'] = 'USD'
+    data['abc'] = 'Alembic'
+    data['mb'] = 'MayaBinary'
+    data['ma'] = 'MayaAscii'
+    data['fbx'] = 'FBX'
+    data['obj'] = 'OBJ'
+    data['rs'] = 'RedshiftProxy'
+    #data['mat'] = 'Material'
+    data['hdr'] = 'HDRI'
+
+    @classmethod
+    def GetObject(cls, format):
+        if format not in Format.GetAllShort():
+            raise Exception('Invalid format {}'.format(format))
+        return getattr(sys.modules[__name__], Format.GetLong(format))
+
+    @classmethod
+    def GetAllLong(cls):
+        return sorted([val for key,val in cls.data.items()])
+
+    @classmethod
+    def GetAllShort(cls):
+        return sorted(cls.data.keys())
+
+    @classmethod
+    def GetLong(cls, key):
+        if key in cls.data.keys():
+            return cls.data[key]
+        raise Exception('Invalid short format {}'.format(key))
+
+    @classmethod
+    def GetShort(cls, value):
+        for key,val in cls.data.items():
+            if val == value:
+                return key
+
+        raise Exception('Invalid long format {}'.format(value))
 
 class Job(nerve.Job):
 
@@ -148,6 +218,13 @@ class Job(nerve.Job):
         return True
 
 class Base:
+    def __init__(self, **kwargs):
+        self.data = {}
+
+    def SetDefaults(self, defaults, **kwargs):
+        for key,val in defaults.items():
+            self.data[key] = kwargs[key] if key in kwargs.keys() else val
+
     def GetOptionsString(self):
         options = ''
         for key,val in self.data.items():
@@ -157,26 +234,47 @@ class Base:
                 options+= ' -'+key
                 continue
             options+= ' -{} {}'.format(key, val)
-        return options    
+        return options
 
-    def _ReleaseUI(self, anim=True):
-        title = nerve.Format( self.GetFormat() ).GetLong()
-        result = cmds.layoutDialog(ui=partial(self._releaseUI, anim), title=title )
-        if result == 'Cancel' or result == 'dismiss':
-            return False
+    def GatherUI(self):
+        def DoIt(*args):
+            buttons = cmds.radioCollection(args[0]['mode'], q=True, collectionItemArray=True)
+            for button in buttons:
+                if cmds.radioButton(button, q=True, select=True):
+                    self.data['mode'] = cmds.radioButton(button, q=True, label=True)
+            cmds.layoutDialog(dismiss='OK')
 
-        #nerve.String.pprint(self.data)
-        self.Release()
+        def Cancel(*args):
+            return cmds.layoutDialog(dismiss='Cancel')
 
-    def _GatherUI(self):
-        title = nerve.Format( self.GetFormat() ).GetLong()
+        data = {}
+        cmds.columnLayout()
+        if True:
+            cmds.frameLayout(label='Options', marginHeight=10, marginWidth=10, font="boldLabelFont", width=400-2)
+            if True:
+                cmds.rowColumnLayout(numberOfRows=1, columnOffset=[1, 'right', 40])
+                if True:
+                    cmds.text(label='Method')
+                    data['mode'] = cmds.radioCollection()
+                    buttons = []
+                    for mode in self.GatherMethods:
+                        buttons.append(cmds.radioButton(label=mode.capitalize()))
+                    cmds.radioCollection(data['mode'], e=True, select=buttons[0])
 
-        result = cmds.layoutDialog(ui=partial(self._gatherUI), title=title)
-        if result == 'Cancel' or result == 'dismiss':
-            return False
 
-        #nerve.String.pprint(self.data)
-        self.Gather()
+                cmds.setParent('..')
+            cmds.setParent('..')
+            cmds.frameLayout(labelVisible=False, marginHeight=10, marginWidth=10, font="boldLabelFont", width=400-2)
+            if True:
+                cmds.rowColumnLayout(numberOfRows=1)
+                if True:
+                    bwidth = 182
+                    cmds.button(label="OK", width=bwidth, height=50, command=partial(DoIt, data))
+                    cmds.text(label='', width=10)
+                    cmds.button(label="Cancel", width=bwidth, height=50, command=Cancel)
+                cmds.setParent('..')
+            cmds.setParent('..')
+        cmds.setParent('..')
 
     def _releaseUI(self, anim=True):
         def refresh(*args):
@@ -197,6 +295,7 @@ class Base:
                 max = cmds.playbackOptions(q=True, max=True)
                 cmds.intFieldGrp(data['frameRange'], e=True, v1=int(min), v2=int(max), enable=False)
 
+        # Buttons
         def DoIt(*args):
 
             if data['anim']:
@@ -216,6 +315,7 @@ class Base:
 
         def Cancel(*args):
             return cmds.layoutDialog(dismiss='Cancel')
+
 
         animmodes = ['Current Frame', 'Custom Frame Range', 'Current Frame Range']
         data = {}
@@ -248,71 +348,17 @@ class Base:
         cmds.setParent('..')
         refresh((data))
 
-    def _gatherUI(self):
-        def DoIt(*args):
-            buttons = cmds.radioCollection(args[0]['mode'], q=True, collectionItemArray=True)
-            for button in buttons:
-                if cmds.radioButton(button, q=True, select=True):
-                    self.data['mode'] = cmds.radioButton(button, q=True, label=True)
-                    self.data['gatherMethod'] = self.data['mode']
-                    cmds.layoutDialog(dismiss='OK')
-                    return True
+class Alembic(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
 
-
-            cmds.layoutDialog(dismiss='OK')
-
-        def Cancel(*args):
-            return cmds.layoutDialog(dismiss='Cancel')
-
-        data = {}
-        cmds.columnLayout()
-        if True:
-            cmds.frameLayout(label='Options', marginHeight=10, marginWidth=10, font="boldLabelFont", width=400-2)
-            if True:
-                cmds.rowColumnLayout(numberOfRows=1, columnOffset=[1, 'right', 40])
-                if True:
-                    cmds.text(label='Method')
-                    data['mode'] = cmds.radioCollection()
-                    buttons = []
-                    for mode in self.gather:
-                        buttons.append(cmds.radioButton(label=mode.capitalize()))
-                    cmds.radioCollection(data['mode'], e=True, select=buttons[0])
-
-                cmds.setParent('..')
-            cmds.setParent('..')
-            cmds.frameLayout(labelVisible=False, marginHeight=10, marginWidth=10, font="boldLabelFont", width=400-2)
-            if True:
-                cmds.rowColumnLayout(numberOfRows=1)
-                if True:
-                    bwidth = 182
-                    cmds.button(label="OK", width=bwidth, height=50, command=partial(DoIt, data))
-                    cmds.text(label='', width=10)
-                    cmds.button(label="Cancel", width=bwidth, height=50, command=Cancel)
-                cmds.setParent('..')
-            cmds.setParent('..')
-        cmds.setParent('..')
-
-class Alembic(nerve.Asset, Base):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'abc'
-        nerve.Asset.__init__(self, path, **kwargs)
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import', 'Reference', 'Replace')
+        self.GatherMethods = ['Import', 'Reference', 'Replace']
 
         for plugin in ['AbcImport', 'AbcExport']:
             if not cmds.pluginInfo(plugin, q=True, loaded=True):
                 cmds.loadPlugin(plugin)
 
-    def Export(self, file=None, **kwargs):
-        if not len(cmds.ls(sl=True)):
-            print('Nothing selected.'),
-            return False
-
-        if not file:
-            file = self.GetFilePath('session')
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
-
+    def Export(self, file, **kwargs):
         options = ''
         options+= ' -file {}'.format(file)
         for n in cmds.ls(sl=True, l=True):
@@ -332,14 +378,10 @@ class Alembic(nerve.Asset, Base):
         cmds.AbcExport(j=options)
 
         cmds.isolateSelect(panel, state=0)
-        
-        print('Asset {} released [Alembic]'.format(self.GetPath())),
 
         return True
 
-    def Reference(self, file=None, **kwargs):
-        if file is None:
-            file = self.GetFilePath('session')
+    def Reference(self, file, **kwargs):
         options = {}
         options['type'] = 'Alembic'
 
@@ -353,9 +395,7 @@ class Alembic(nerve.Asset, Base):
 
         return cmds.file(file, **args)
 
-    def Import(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
+    def Import(self, file, **kwargs):
         options = {}
         options['type'] = 'Alembic'
 
@@ -367,10 +407,7 @@ class Alembic(nerve.Asset, Base):
         args['options'] = ';'.join( ['{}={}'.format(key, val) for key,val in options.items()] )
         return cmds.file(file.AsString(), **args)
 
-    def Replace(self, file=None, **kwargs):
-        if file is None:
-            file = self.GetFilePath('session')
-
+    def Replace(self, file, **kwargs):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
             raise Exception('Nothing Selected.')
@@ -391,77 +428,268 @@ class Alembic(nerve.Asset, Base):
             cmds.AbcImport(file, mode='replace')
 
     def ReleaseUI(self):
-        self._ReleaseUI(anim=True)
+        Base._releaseUI(self)
 
-    def GatherUI(self):
-        self._GatherUI()
+class OBJ(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+        self.GatherMethods = ['Import', 'Reference', 'Replace']
+        for plugin in ['objExport']:
+            if not cmds.pluginInfo(plugin, q=True, loaded=True):
+                cmds.loadPlugin(plugin)
 
-class RedshiftProxy(nerve.Asset, Base):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'rs'
-        nerve.Asset.__init__(self, path, **kwargs)
+    def Export(self, file, **kwargs):
+        args = {}
+        args['force'] = True
+        args['type'] = 'OBJexport'
+        args['preserveReferences'] = True
+        args['exportSelected'] = True
+        args['options'] = 'groups=1;ptgroups=1;materials=1;smoothing=1;normals=1'
+        cmds.file(file, **args)
+        return True
 
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import', 'Replace')
-    
-    def Export(self, filepath=None, **kwargs):
+    def Reference(self, file, **kwargs):
+        args = {}
+        args['type'] = 'OBJ'
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['mergeNamespacesOnClash'] = True
+        args['reference'] = True
+        args['namespace'] = kwargs['namespace'] if 'namespace' in kwargs.keys() else nerve.Path(file).GetName()
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+
+    def Import(self, file, **kwargs):
+        args = {}
+        args['type'] = 'OBJ'
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['import'] = True
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+
+    def Replace(self, file, **kwargs):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
-            print('Nothing Selected.'),
+            raise Exception('Nothing Selected.')
+
+        if not cmds.referenceQuery(sel[0], isNodeReferenced=True):
+            cmds.warning('Selection is not referenced. OBJ does not support imported replacements.')
             return False
 
-        if not filepath :
-            filepath  = self.GetFilePath('session')
+        args = {}
+        args['type'] = 'OBJ'
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['loadReference'] = cmds.referenceQuery(sel[0], referenceNode=True)
+        args['options'] = 'mo=1'
 
-        if not isinstance(filepath , nerve.Path):
-            filepath  = nerve.Path(filepath)
+        cmds.file(file, **args)
+        return True
 
+class Maya(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+        self.GatherMethods = ['Import', 'Reference', 'Replace']
+
+    def Export(self, file, **kwargs):
+        args = {}
+        args['force'] = True
+        args['type'] = self.type
+        args['preserveReferences'] = True
+        args['exportSelected'] = True
+        args['options'] = 'v=0'
+        cmds.file(file, **args)
+        return True
+
+    def Reference(self, file, **kwargs):
+        args = {}
+        args['type'] = self.type
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['mergeNamespacesOnClash'] = True
+        args['reference'] = True
+        args['namespace'] = kwargs['namespace'] if 'namespace' in kwargs.keys() else nerve.Path(file).GetName()
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+
+    def Import(self, file, **kwargs):
+        args = {}
+        args['type'] = self.type
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['import'] = True
+        args['options'] = 'v=0'
+
+        cmds.file(file, **args)
+
+    def Replace(self, file, **kwargs):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            raise Exception('Nothing Selected.')
+
+        if not cmds.referenceQuery(sel[0], isNodeReferenced=True):
+            cmds.warning('Selection is not referenced. Maya does not support imported replacements.')
+            return False
+
+        args = {}
+        args['type'] = self.type
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['loadReference'] = cmds.referenceQuery(sel[0], referenceNode=True)
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+        return True
+
+class MayaBinary(Maya):
+    def __init__(self, **kwargs):
+        Maya.__init__(self, **kwargs)
+        self.type = 'mayaBinary'
+
+class MayaAscii(Maya):
+    def __init__(self, **kwargs):
+        Maya.__init__(self, **kwargs)
+        self.type = 'mayaAscii'
+
+class FBX(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+        self.GatherMethods = ['Import', 'Reference', 'Replace']
+        for plugin in ['fbxmaya']:
+            if not cmds.pluginInfo(plugin, q=True, loaded=True):
+                cmds.loadPlugin(plugin)
+
+    def Export(self, file, **kwargs):
+        mel.eval('FBXResetExport')
+        mel.eval('FBXProperty Export|AdvOptGrp|UI|GenerateLogData -v 0')
+
+        if 'animation' in kwargs.keys():
+            mel.eval('FBXProperty Export|IncludeGrp|Animation -v {}'.format(int(kwargs['animation'])))
+
+        if 'frameRange' in kwargs.keys():
+            mel.eval('FBXProperty Export|IncludeGrp|Animation -v 1')
+            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation -v 1')
+            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation|BakeFrameStart -v {}'.format(kwargs['frameRange'][0]))
+            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation|BakeFrameEnd -v {}'.format(kwargs['frameRange'][1]))
+            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation|BakeFrameStep -v 1')
+        else:
+            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation -v 0')
+
+        nerve.Path(file).GetParent().Create()
+        mel.eval('FBXExport -f "{}" -s'.format(file))
+
+    def Reference(self, file, **kwargs):
+        args = {}
+        args['type'] = 'FBX'
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['mergeNamespacesOnClash'] = True
+        args['reference'] = True
+        args['namespace'] = kwargs['namespace'] if 'namespace' in kwargs.keys() else nerve.Path(file).GetName()
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+
+    def Import(self, file, **kwargs):
+        args = {}
+        args['type'] = 'FBX'
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['import'] = True
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+
+    def Replace(self, file, **kwargs):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            raise Exception('Nothing Selected.')
+
+        if not cmds.referenceQuery(sel[0], isNodeReferenced=True):
+            cmds.warning('Selection is not referenced. OBJ does not support imported replacements.')
+            return False
+
+        args = {}
+        args['type'] = 'OBJ'
+        args['ignoreVersion'] = True
+        args['groupLocator'] = False
+        args['loadReference'] = cmds.referenceQuery(sel[0], referenceNode=True)
+        args['options'] = 'mo=1'
+
+        cmds.file(file, **args)
+        return True
+
+class BaseNew:
+    pass
+
+class RedshiftProxyOLD(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+        self.GatherMethods = ['Import', 'Replace']
+        for plugin in ['redshift4maya']:
+            if not cmds.pluginInfo(plugin, q=True, loaded=True):
+                cmds.loadPlugin(plugin)
+
+    def ExportOLD(self, file, **kwargs):
+        args = {}
+        args['selected'] = True
+        if 'frameRange' in kwargs.keys():
+            args['startFrame'] = kwargs['frameRange'][0]
+            args['endFrame'] = kwargs['frameRange'][1]
+            args['byFrame'] = 1
+
+            file = nerve.Path(file)
+            dir = file.GetParent() + file.GetFileName()
+            dir.Create()
+            file = str(dir+file.GetFileName()).rstrip('/')+'.{}.rs'.format(str(kwargs['frameRange'][0]).zfill(4))
+
+        if 'compress' in kwargs.keys():
+            args['compress'] = True
+
+        args['filePath'] = str(file)
+        cmds.rsProxy(**args)
+
+    def Export(self, file, **kwargs):
         args = {}
         args['selected'] = True
         args['compress'] = kwargs['compress'] if 'compress' in kwargs.keys() else False
 
-        if not filepath.GetParent().Exists():
-            filepath.GetParent().Create()
-
-        if 'frameRange' in self.data.keys():
-            print("OK")
-            dir = filepath.GetParent() + filepath.GetFileName()
+        if 'frameRange' in kwargs.keys():
+            file = nerve.Path(file)
+            dir = file.GetParent() + file.GetFileName()
             dir.Create()
+
 
             panel = cmds.paneLayout('viewPanes', q=True, pane1=True)
             cmds.isolateSelect(panel, state=1)
-            for i in range(self.data['frameRange'][0], self.data['frameRange'][1]+1):
-                fileName = filepath.GetFileName() + '.{}.rs'.format( str(i).zfill(4) )
+            for i in range(kwargs['frameRange'][0], kwargs['frameRange'][1]+1):
+                fileName = file.GetFileName() + '.{}.rs'.format( str(i).zfill(4) )
                 args['filePath'] = str(dir+fileName)
                 cmds.currentTime(i, u=True)
                 cmds.rsProxy(**args)
             cmds.isolateSelect(panel, state=0)
         else:
-            args['filePath'] = filepath.AsString()
+            args['filePath'] = file.AsString()
             cmds.rsProxy(**args)
 
-        print('Asset {} released [RedshiftProxy]'.format(self.GetPath())),
-
-    def Import(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
-
+    def Import(self, file, **kwargs):
         proxy = cmds.createNode('RedshiftProxyMesh', name=file.GetName()+'RedshiftProxy', skipSelect=True)
         mesh = cmds.createNode('mesh', name=file.GetName()+'Shape')
         cmds.connectAttr(proxy+'.outMesh', mesh+'.inMesh', f=True)
 
         trans = cmds.listRelatives(mesh, p=True)[0]
         cmds.setAttr(proxy+'.fileName', file, type='string')
-        cmds.setAttr(proxy+'.displayMode', 0)
+        cmds.setAttr(proxy+'.displayMode', 1)
         if nerve.Path(file).HasFrame():
             cmds.setAttr(proxy+'.useFrameExtension', True)
 
         cmds.sets(mesh, forceElement='initialShadingGroup')
 
-    def Replace(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
-
+    def Replace(self, file, **kwargs):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
             cmds.warning('Nothing Selected. Skipping Replace...')
@@ -483,306 +711,17 @@ class RedshiftProxy(nerve.Asset, Base):
         cmds.setAttr(rsProxy + '.fileName', file, type='string')
 
     def ReleaseUI(self):
-        self._ReleaseUI(anim=True)
+        Base._releaseUI(self, anim=True)
 
-    def GatherUI(self):
-        self._GatherUI()
-
-class OBJ(nerve.Asset, Base):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'obj'
-        nerve.Asset.__init__(self, path, **kwargs)
-
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import', 'Reference', 'Replace')
-
-        for plugin in ['objExport']:
-            if not cmds.pluginInfo(plugin, q=True, loaded=True):
-                cmds.loadPlugin(plugin)
-
-    def Export(self, file=None, **kwargs):
-        if not len(cmds.ls(sl=True)):
-            print('Nothing selected.'),
-            return False
-
-        if file is None:
-            file = self.GetFilePath('session')
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
-
-        args = {}
-        args['force'] = True
-        args['type'] = 'OBJexport'
-        args['preserveReferences'] = True
-        args['exportSelected'] = True
-        args['options'] = 'groups=1;ptgroups=1;materials=1;smoothing=1;normals=1'
-        cmds.file(file, **args)
-
-        print('Asset {} released [OBJ]'.format(self.GetPath())),
-        return True
-
-    def Reference(self, file=None, **kwargs):
-        if file is None:
-            file = self.GetFilePath('session')
-
-        args = {}
-        args['type'] = 'OBJ'
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['mergeNamespacesOnClash'] = True
-        args['reference'] = True
-        args['namespace'] = kwargs['namespace'] if 'namespace' in kwargs.keys() else nerve.Path(file).GetName()
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-
-    def Import(self, file=None, **kwargs):
-        if file is None:
-            file = self.GetFilePath('session')
-        args = {}
-        args['type'] = 'OBJ'
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['import'] = True
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-
-    def Replace(self, file=None, **kwargs):
-        sel = cmds.ls(sl=True, l=True)
-        if not len(sel):
-            raise Exception('Nothing Selected.')
-            
-        if file is None:
-            file = cmds.GetFilePath('session')
-            
-        if not cmds.referenceQuery(sel[0], isNodeReferenced=True):
-            cmds.warning('Selection is not referenced. OBJ does not support imported replacements.')
-            return False
-
-        args = {}
-        args['type'] = 'OBJ'
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['loadReference'] = cmds.referenceQuery(sel[0], referenceNode=True)
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-        return True
-
-    def GatherUI(self):
-        self._GatherUI()        
-
-class Maya(nerve.Asset, Base):
-    def __init__(self, path='', **kwargs):
-        nerve.Asset.__init__(self, path, **kwargs)
-
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import', 'Reference', 'Replace')
-
-    def Export(self, file=None, **kwargs):
-        if not len(cmds.ls(sl=True)):
-            print('Nothing Selected.'),
-            return False
-
-        if not file:
-            file = self.GetFilePath('session')
-
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
-
-        args = {}
-        args['force'] = True
-        args['type'] = self.type
-        args['preserveReferences'] = True
-        args['exportSelected'] = True
-        args['options'] = 'v=0'
-        cmds.file(file, **args)
-        return True
-
-    def Reference(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
-
-        args = {}
-        args['type'] = self.type
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['mergeNamespacesOnClash'] = True
-        args['reference'] = True
-        args['namespace'] = kwargs['namespace'] if 'namespace' in kwargs.keys() else nerve.Path(file).GetName()
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-
-    def Import(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
-
-        args = {}
-        args['type'] = self.type
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['import'] = True
-        args['options'] = 'v=0'
-
-        cmds.file(file, **args)
-
-    def Replace(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
-
-        sel = cmds.ls(sl=True, l=True)
-        if not len(sel):
-            raise Exception('Nothing Selected.')
-
-        if not cmds.referenceQuery(sel[0], isNodeReferenced=True):
-            cmds.warning('Selection is not referenced. Maya does not support imported replacements.')
-            return False
-
-        args = {}
-        args['type'] = self.type
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['loadReference'] = cmds.referenceQuery(sel[0], referenceNode=True)
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-        return True
-
-    def GatherUI(self):
-        self._GatherUI()
-
-class MayaBinary(Maya):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'mb'
-        self.type = 'mayaBinary'
-        Maya.__init__(self, path, **kwargs)
-
-class MayaAscii(Maya):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'ma'
-        self.type = 'mayaAscii'
-        Maya.__init__(self, path, **kwargs)
-
-class FBX(nerve.Asset, Base):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'fbx'
-        nerve.Asset.__init__(self, path, **kwargs)
-
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import', 'Reference', 'Replace')
-
-        for plugin in ['fbxmaya']:
-            if not cmds.pluginInfo(plugin, q=True, loaded=True):
-                cmds.loadPlugin(plugin)
-
-    def Export(self, file=None, **kwargs):
-        if not len(cmds.ls(sl=True)):
-            print('Nothing Selected'),
-            return False
-
-        if not file:
-            file = self.GetFilePath('session')
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
-
-        mel.eval('FBXResetExport')
-        mel.eval('FBXProperty Export|AdvOptGrp|UI|GenerateLogData -v 0')
-
-        if 'animation' in kwargs.keys():
-            mel.eval('FBXProperty Export|IncludeGrp|Animation -v {}'.format(int(kwargs['animation'])))
-
-        if 'frameRange' in kwargs.keys():
-            mel.eval('FBXProperty Export|IncludeGrp|Animation -v 1')
-            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation -v 1')
-            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation|BakeFrameStart -v {}'.format(kwargs['frameRange'][0]))
-            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation|BakeFrameEnd -v {}'.format(kwargs['frameRange'][1]))
-            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation|BakeFrameStep -v 1')
-        else:
-            mel.eval('FBXProperty Export|IncludeGrp|Animation|BakeComplexAnimation -v 0')
-
-        nerve.Path(file).GetParent().Create()
-        mel.eval('FBXExport -f "{}" -s'.format(file))
-
-    def Reference(self, file=None, **kwargs):
-
-        if not file:
-            file = self.GetFilePath('session')        
-        args = {}
-        args['type'] = 'FBX'
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['mergeNamespacesOnClash'] = True
-        args['reference'] = True
-        args['namespace'] = kwargs['namespace'] if 'namespace' in kwargs.keys() else nerve.Path(file).GetName()
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-
-    def Import(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')        
-        args = {}
-        args['type'] = 'FBX'
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['import'] = True
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-
-    def Replace(self, file=None, **kwargs):
-
-        if not file:
-            file = self.GetFilePath('session')        
-
-        sel = cmds.ls(sl=True, l=True)
-        if not len(sel):
-            raise Exception('Nothing Selected.')
-
-        if not cmds.referenceQuery(sel[0], isNodeReferenced=True):
-            cmds.warning('Selection is not referenced. OBJ does not support imported replacements.')
-            return False
-
-        args = {}
-        args['type'] = 'OBJ'
-        args['ignoreVersion'] = True
-        args['groupLocator'] = False
-        args['loadReference'] = cmds.referenceQuery(sel[0], referenceNode=True)
-        args['options'] = 'mo=1'
-
-        cmds.file(file, **args)
-        return True
-
-    def ReleaseUI(self):
-        self._ReleaseUI(anim=True)
-    
-    def GatherUI(self):
-        self._GatherUI()
-
-class USDBase(nerve.Asset, Base):
-    def __init__(self, path='', **kwargs):
-        nerve.Asset.__init__(self, path, **kwargs)
-
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import', 'Reference', 'Replace', 'Proxy')
-
+class USDBase(Base):
+    def __init__(self, **kwargs):
+        Base.__init__(self, **kwargs)
+        self.GatherMethods = ['Import', 'Reference', 'Replace', 'Proxy']
         for plugin in ['mayaUsdPlugin']:
             if not cmds.pluginInfo(plugin, q=True, loaded=True):
                 cmds.loadPlugin(plugin)
 
-    def Export(self, file=None, **kwargs):
-        if not len(cmds.ls(sl=True)):
-            print('Nothing Selected.'),
-            return False
-        
-        if not file:
-            file = self.GetFilePath('session')
-
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
-
+    def Export(self, file, **kwargs):
         args = {}
 
         args['selection'] = True
@@ -841,9 +780,7 @@ class USDBase(nerve.Asset, Base):
 
         args['staticSingleSample'] = True
 
-    def Reference(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')        
+    def Reference(self, file, **kwargs):
         options = {}
         options['readAnimData'] = "1"
        # if 'frameRange' in kwargs.keys():
@@ -857,9 +794,7 @@ class USDBase(nerve.Asset, Base):
 
         return cmds.file(file, **args)
 
-    def Import(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')        
+    def Import(self, file, **kwargs):
         args = {}
         args['file'] = file
         args['readAnimData'] = True
@@ -868,19 +803,13 @@ class USDBase(nerve.Asset, Base):
 
         cmds.mayaUSDImport(**args)
 
-    def Proxy(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')        
+    def Proxy(self, file, **kwargs):
         print("CREATE PROXY")
 
-    def Replace(self, file=None, **kwargs):
+    def Replace(self, file, **kwargs):
         sel = cmds.ls(sl=True, l=True)
-        
         if not len(sel):
             raise Exception('Nothing selected.')
-
-        if not file:
-            file = self.GetFilePath('session')             
 
         if cmds.referenceQuery(sel[0], isNodeReferenced=True):
             options = {}
@@ -895,21 +824,101 @@ class USDBase(nerve.Asset, Base):
             raise Exception('Selection is not referenced.')
 
     def ReleaseUI(self):
-        return self._ReleaseUI(anim=True)
-
-    def GatherUI(self):
-        self._GatherUI()
+        return Base._releaseUI(self, anim=True)
 
 class USDAscii(USDBase):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'usda'
+    def __init__(self, **kwargs):
+        USDBase.__init__(self, **kwargs)
         self.type = 'usdascii'
-        USDBase.__init__(self, path, **kwargs)
 
 class USD(USDBase):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'usd'
+    def __init__(self, **kwargs):
+        USDBase.__init__(self, **kwargs)
         self.type = 'USD'
-        USDBase.__init__(self, path, **kwargs)
-        
+
+class HDRI(nerve.HDRI):
+    pass
+
+class RedshiftProxy(nerve.Asset, BaseNew):
+    def __init__(self, path, **kwargs):
+
+        kwargs['format'] = 'rs'
+        nerve.Asset.__init__(self, path, **kwargs)
+
+        self.AddReleaseMethod('Export')
+        self.AddGatherMethod('Import')
+    
+    def Export(self, filepath=None, **kwargs):
+        print("OK")
+        if not filepath :
+            filepath  = self.GetFilePath('session')
+
+        if not isinstance(filepath , nerve.Path):
+            filepath  = nerve.Path(filepath)
+
+        args = {}
+        args['selected'] = True
+        args['compress'] = kwargs['compress'] if 'compress' in kwargs.keys() else False
+
+        if not filepath.GetParent().Exists():
+            filepath.GetParent().Create()
+
+        if 'frameRange' in kwargs.keys():
+            dir = filepath.GetParent() + filepath.GetFileName()
+            dir.Create()
+
+            panel = cmds.paneLayout('viewPanes', q=True, pane1=True)
+            cmds.isolateSelect(panel, state=1)
+            for i in range(kwargs['frameRange'][0], kwargs['frameRange'][1]+1):
+                fileName = filepath.GetFileName() + '.{}.rs'.format( str(i).zfill(4) )
+                args['filePath'] = str(dir+fileName)
+                cmds.currentTime(i, u=True)
+                cmds.rsProxy(**args)
+            cmds.isolateSelect(panel, state=0)
+        else:
+            args['filePath'] = filepath.AsString()
+            cmds.rsProxy(**args)
+
+    def Import(self, file=None, **kwargs):
+        if not file:
+            file = self.GetFilePath('session')
+
+        proxy = cmds.createNode('RedshiftProxyMesh', name=file.GetName()+'RedshiftProxy', skipSelect=True)
+        mesh = cmds.createNode('mesh', name=file.GetName()+'Shape')
+        cmds.connectAttr(proxy+'.outMesh', mesh+'.inMesh', f=True)
+
+        trans = cmds.listRelatives(mesh, p=True)[0]
+        cmds.setAttr(proxy+'.fileName', file, type='string')
+        cmds.setAttr(proxy+'.displayMode', 1)
+        if nerve.Path(file).HasFrame():
+            cmds.setAttr(proxy+'.useFrameExtension', True)
+
+        cmds.sets(mesh, forceElement='initialShadingGroup')
+
+    def Replace(self, file=None, **kwargs):
+        if not file:
+            file = self.GetFilePath('session')
+
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            cmds.warning('Nothing Selected. Skipping Replace...')
+            return False
+
+        shapes = cmds.ls(sl=True, l=True, dagObjects=True, leaf=True, allPaths=True, type='mesh') or []
+        if not len(shapes):
+            cmds.warning('Selection is not a refshift Proxy. Skipping Replace...')
+            return False
+        shape = shapes[0]
+        rsProxy = cmds.listConnections( shape+'.inMesh', type='RedshiftProxyMesh') or []
+
+        if not len(rsProxy):
+            cmds.warning('Selection is not a refshift Proxy. Skipping Replace...')
+            return False
+
+        rsProxy = rsProxy[0]
+
+        cmds.setAttr(rsProxy + '.fileName', file, type='string')
+
+    def ReleaseUI(self):
+        Base._releaseUI(self, anim=True)
 
