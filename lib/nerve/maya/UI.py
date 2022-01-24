@@ -184,15 +184,14 @@ class Menu:
             itm('Instance', parent, nerve.maya.tools.instance)
             itm('Duplicate With Input Graph', parent, nerve.maya.tools.duplicateInputGraph)
             itm('Import All Instances', parent, nerve.maya.tools.deinstance)
-            sep('Scatter', parent)
-            itm('Create Scatter...', parent, nerve.maya.tools.scatter)
-            itm('Scatter UI', parent, nerve.maya.tools.scatterUI)
-            sep('Locators', parent)
-            itm('Copy Transform', parent, nerve.maya.tools.copyTransform)
-            itm('Paste Transform', parent, nerve.maya.tools.pasteTransform)
-            itm('Snap Location', parent, nerve.maya.tools.snap)
+            sep('Transforms', parent)
+            itm('Reset to Origin', parent, nerve.maya.tools.center)
+            itm('Snap Transform', parent, nerve.maya.tools.snap)
             itm('Locator To Pivot', parent, nerve.maya.tools.locatorToPivot)
             itm('Locator To Average', parent, nerve.maya.tools.locatorToAverage)
+            sep('', parent)
+            itm('Copy Transform', parent, nerve.maya.tools.copyTransform)
+            itm('Paste Transform', parent, nerve.maya.tools.pasteTransform)
             sep('References', parent)
             itm('Import Reference', parent, nerve.maya.tools.importReference)
             itm('Remove Reference', parent, nerve.maya.tools.removeReference)
@@ -202,6 +201,12 @@ class Menu:
             itm('Remove Unknown Nodes', parent, nerve.maya.tools.removeUnknownNodes)
             itm('Remove Unknown Plugins', parent, nerve.maya.tools.removeUnknownPlugins)
             itm('Remove Turtle Plugin', parent, nerve.maya.tools.removeTurtle)
+
+        self.ctrl['scatter'] = grp('Scatter')
+        if True: # Scatter
+            parent = self.ctrl['scatter']
+            itm('Create Scatter...', parent, nerve.maya.tools.scatter)
+            itm('Scatter UI', parent, nerve.maya.tools.scatterUI)
 
         self.ctrl['render'] = grp('Rendering')
         if True: # Rendering

@@ -145,6 +145,21 @@ def locatorToAverage():
     cmds.xform(loc, ws=True, t=avg)
     cmds.xform(loc, s=(0.1, 0.1, 0.1))
 
+def center():
+    import maya.api.OpenMaya as om
+    sel = cmds.ls(sl=True, l=True, type='transform')
+    for n in sel:
+        bbox = cmds.xform(n, q=True, a=True, ws=True, boundingBox=True)
+        min = om.MVector((bbox[0], bbox[1], bbox[2]))
+        max = om.MVector((bbox[3], bbox[4], bbox[5]))
+        height = (max.y - min.y)*0.5
+        pos = om.MVector(cmds.xform(n, q=True, ws=True, t=True))
+        center = min+((max-min)*0.5)
+        cmds.xform(n, ws=True, piv=(center[0], center[1]-height, center[2]))    
+        offset = (center-pos)*-1
+        cmds.xform(n, ws=True, t=(offset[0], offset[1]+height, offset[2]))
+        cmds.makeIdentity(n, apply=True, t=True, r=True, s=True, n=True, pn=True)
+
 def snap():
     sel = cmds.ls(sl=True, l=True)
     if len(sel) < 2:
@@ -269,7 +284,7 @@ def pasteTransform():
 
 def deinstance():
 
-    import maya.OpenMaya as om
+    import maya.api.OpenMaya as om
 
     def getInstances():
         instances = []
