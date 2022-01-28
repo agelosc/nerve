@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.views import View
 from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, Http404, FileResponse
 from . import forms
 
@@ -9,6 +10,82 @@ import os, subprocess
 
 import nerve
 import nerve.apps
+
+class Action:
+        
+    @staticmethod
+    def App(request):
+        if "ajax" not in request.POST.keys():
+            return HttpResponse('')
+
+        path = request.POST['path']
+        app = request.POST['app']
+
+        if app == 'explore':
+            subprocess.Popen( ['start', path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT , shell=True)
+            return HttpResponse('')
+
+        if hasattr(nerve.apps, app):
+            appobj = getattr(nerve.apps, app)(path).Load()
+            date = datetime.now().strftime('%a %d %b %y %H:%M:%S')
+            return HttpResponse('[{0}] Loading {1}...'.format(date, app))
+
+        return HttpResponse('')
+
+    @staticmethod
+    def ajax(request):
+        if not 'action' in request.POST.keys():
+            return HttpResponse('action not defined.')
+        
+        if not hasattr(Action, request.POST['action']):
+            return HttpResponse('action does not exist.')
+
+        return getattr(Action, request.POST['action'])(request)
+        
+    @staticmethod
+    def job_create(request):
+        path = nerve.String.FileDialog(mode='dir', title='Create Job')
+        if not path:
+            return HttpResponse('Job Create canceled.')
+        
+        Job = nerve.Job( path )
+        if not Job.Exists():
+            Job.Create()
+        Job.AddToRecent(path)
+       
+        return HttpResponse('')
+
+    @staticmethod
+    def job_add(request):
+        path = nerve.String.FileDialog(mode='dir', title='Add Job')
+        if not path:
+            return HttpResponse('Job Add Canceled.')
+        
+        Job = nerve.Job(path)
+        if not Job.Exists():
+            return HttpResponse('Invalid Job path.')
+
+        Job.AddToRecent(Job.GetDir())
+        return HttpResponse('')
+
+    @staticmethod
+    def job_remove(request):
+        if 'path' not in request.POST.keys():
+            return HttpResponse('Job path not set')
+        
+        path = request.POST.get('path')
+        nerve.Job.RemoveFromRecents(path)
+        return HttpResponse('Job removed from recents')
+
+class Job(View):
+    def get(self, request, *args, **kwargs):
+        job_list = []
+        context = {'job_list': job_list}
+        for recent in nerve.Job.GetRecent():
+            Job = nerve.Job(recent)
+            job_list.append( Job.AsJson() )
+        response = render(request, 'jobs.html', context)
+        return response
 
 def image(request, path):
     return FileResponse(open(path, 'rb'))

@@ -185,25 +185,50 @@ class String:
         pp.pprint(data)
 
     @staticmethod
-    def FileDialog(mode='dir'):
+    def FileDialog(mode='dir', title=None):
         import tkinter as tk
         from tkinter import filedialog
 
         root = tk.Tk()
         root.withdraw()
+        root.wm_attributes('-topmost', 1)
+
+        if not title:
+            title = 'Select '+mode
+
+        root.title(title)
+
         if mode == 'dir':
-            path = filedialog.askdirectory(mustexist=False)
+            path = filedialog.askdirectory(mustexist=False, title=title)
             root.destroy()
             return path
 
         if mode == 'file':
-            file_path = filedialog.askopenfilename()
+            file_path = filedialog.askopenfilename(title=title)
             root.destroy()
             return file_path
+        
+        root.destroy()
+        return False
 
     @staticmethod
     def GetParentPath(path):
         return Path(path).GetParent().AsString()
+
+    @staticmethod
+    def UnCamelCase(name, char=' '):
+        import re
+        result = re.sub('([A-Z]{1})', r'%s\1'%char, name)
+        return result.title()
+
+    @staticmethod
+    def UnSnakeCase(name, char=' '):
+        result = name.replace('_', char)
+        return result.title()
+
+    @staticmethod
+    def Pretty(name):
+        return String.UnSnakeCase( String.UnCamelCase(name) )
 
 class Path:
     def __init__(self, path=None, separator='/'):
@@ -580,7 +605,6 @@ class Config(dict):
             datafile.SetContent('{}')
             datafile.Create()
 
-
         with open(datafile.AsString(), 'w') as outfile:
             json.dump( self['local'], outfile)
 
@@ -862,6 +886,9 @@ class Job(Base):
     @staticmethod
     def RemoveFromRecents(path):
         path = Path(path)
+        if 'recentJobs' not in conf['local'].keys():
+            return False
+
         if str(path) in conf['local']['recentJobs']:
             conf['local']['recentJobs'].remove(str(path))
             conf.SetLocalData()
@@ -872,7 +899,7 @@ class Job(Base):
         return True
 
     @staticmethod
-    def GetRecent():
+    def GetRecentOLD():
         key = 'recentJobs'
 
         if key in conf['local'].keys():
@@ -888,6 +915,13 @@ class Job(Base):
             return []
 
         return conf['local'][key]
+
+    @staticmethod
+    def GetRecent():
+        key = 'recentJobs'
+        if 'recentJobs' not in conf['local'].keys():
+            return []
+        return conf['local']['recentJobs']
 
     @staticmethod
     def Get():
@@ -907,11 +941,12 @@ class Job(Base):
     def GetName(self):
         return Path(self.data['directory']).GetHead()
 
-    def JsonEncode(self):
+    def AsJson(self):
         data = Base.JsonEncode(self)
         data['path'] = self.data['directory']
+        data['pretty'] = String.Pretty( self.GetName() )
         return data
-
+        
     def GetChildren(self):
         return []
 
