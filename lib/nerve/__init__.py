@@ -660,7 +660,10 @@ class USD:
 
 class Format:
     formats = {}
+    # Common
     formats['usd'] = 'USD'
+
+    # Maya
     formats['abc'] = 'Alembic'
     formats['mb'] = 'MayaBinary'
     formats['ma'] = 'MayaAscii'
@@ -668,7 +671,9 @@ class Format:
     formats['obj'] = 'OBJ'
     formats['rs'] = 'RedshiftProxy'
 
-    formats['hdr'] = 'HDRI'
+    formats['tex'] = 'Texture'
+
+    #formats['hdr'] = 'HDRI'
 
     def __init__(self, format):
         for key in self.formats.keys():
@@ -1215,7 +1220,7 @@ class Asset(Base):
 
     def GetExtension(self):
         if 'ext' in self.data.keys():
-            return self.data['exr']
+            return self.data['ext']
         return self.GetFormat()
 
     def SetExtension(self, ext):
@@ -1400,12 +1405,13 @@ class Asset(Base):
                 self.gather.append(arg)
 
     def Release(self, _name=None, **kwargs):
+
         if not len(self.release):
             Exception('Asset object does not have any release methods.')
 
         if _name is None:
             if 'releaseMethod' in self.data.keys():
-                _name = self.data['_releaseMethod']
+                _name = self.data['releaseMethod']
             else:            
                 return getattr(self, self.release[0])(**kwargs)
         
@@ -1452,6 +1458,33 @@ class HDRI(Asset):
         shutil.copyfile(str(source), str(self.GetFilePath('session')))
         self.Create()
 
+class Texture(Asset):
+    def __init__(self, path='', **kwargs):
+        kwargs['format'] = 'tex'
+        Asset.__init__(self, path, **kwargs)
+
+        self.AddReleaseMethod('Copy')
+        self.AddGatherMethod('View')
+    
+    def Copy(self, **kwargs):
+        if 'filepath' not in kwargs.keys():
+            print('Filepath not set')
+            return False
+        
+        filepath = kwargs['filepath']
+        if not isinstance(filepath, Path):
+            filepath = Path(filepath)
+        
+        self.SetExtension( filepath.GetExtension() )
+        
+        if not filepath.Exists():
+            print('Texture file does not exist')
+            return False
+
+        filepath.Copy(self.GetFilePath('session'))
+        self.Create()
+        return True
+        
 
     
 

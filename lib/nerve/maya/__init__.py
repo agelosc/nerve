@@ -424,7 +424,6 @@ class RedshiftProxy(nerve.Asset, Base):
             filepath.GetParent().Create()
 
         if 'frameRange' in self.data.keys():
-            print("OK")
             dir = filepath.GetParent() + filepath.GetFileName()
             dir.Create()
 
