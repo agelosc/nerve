@@ -1066,7 +1066,7 @@ class Asset(Base):
         self.paths['session'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(), self.GetExtension() )
         self.paths['latest'] = '{0}/{1}/{1}_{2}.{3}'.format(self.GetRootPath(), self.GetName(), self.GetVersionAsString(-1), self.GetExtension() )
         self.paths['range'] = '{0}/{1}/{1}_{2}/{1}_{2}.{3}.{4}'.format( self.GetRootPath(), self.GetName(), self.GetVersionAsString(), '{}', self.GetExtension() )
-        self.paths['thumbnail'] = '{0}/{1}.png'.format( self.GetRootPath(), self.GetName() )
+        self.paths['cover'] = '{0}/{1}.png'.format( self.GetRootPath(), self.GetName() )
 
     def GetRootPath(self):
         outpath = self.GetJobPath() + 'assets'
@@ -1462,15 +1462,17 @@ class Texture(Asset):
         filepath = kwargs['filepath']
         if not isinstance(filepath, Path):
             filepath = Path(filepath)
-        
-        self.SetExtension( filepath.GetExtension() )
-        
+
         if not filepath.Exists():
             print('Texture file does not exist')
             return False
 
+        self.SetExtension( filepath.GetExtension() )
         filepath.Copy(self.GetFilePath('session'))
         self.Create()
+
+        cover = Image(self.GetFilePath('session'))
+        cover.Square( self.GetCover() )
         return True
     
 

@@ -326,7 +326,6 @@ def HDRITests():
 
     print('# Passed All HDRI tests')
 
-
 def ImageTests():
     image = nerve.Image()
     #image.SaveClipboard()
@@ -335,11 +334,14 @@ def ImageTests():
     image.SetFile(infile)
     image.Square(outfile)
 
+def TextureTests():
+    asset = nerve.Texture('test')
+    asset.Release(filepath='C:/Users/lemon/Desktop/sunset.exr')
 
 #NewJob()
 #PathTests()
 #ImageTests()
-ImageTests()
+#ImageTests()
 #JobTests()
 #AssetTests()
 #AssetTestsOLD()
@@ -347,7 +349,7 @@ ImageTests()
 #SublayerTests()
 #AssetTests()
 #HDRITests()
-
+TextureTests()
 
 #AppTests()
 
