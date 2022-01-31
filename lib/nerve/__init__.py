@@ -3,132 +3,118 @@ import json, time
 
 class Image:
     def __init__(self, filename=None):
-        from PySide2.QtGui import QImage
-        if filename:
-            self.image = QImage(str(filename))
-        else:
-            self.image = QImage()
-
         self.data = {}
         self.data['file'] = Path(filename)
+        
+        dirs = Path.Glob('$PROGRAMFILES/ImageMagick-*')
+        if not dirs:
+            raise Exception('Image Magick not found in default paths.')
 
-    def Load(self, filename):
-        if not isinstance(filename, Path):
-            filename = Path(filename)
+        self.data['bin'] = Path(dirs[-1])
+        self.data['cmd'] = self.data['bin'] + 'magick.exe'
+        self.data['display'] = self.data['bin'] + 'imgdisplay.exe'
 
-        self.image.load(filename.AsString())
-        self.data['file'] = filename
-        return self
+    def cmd(self, *args):
+        import subprocess
+        args = list(args)
+        args.insert(0, str(self.data['cmd']))
+        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        stdout, stderr =  process.communicate()
+        if stderr:
+            print(stderr)
 
-    def Clipboard(self):
-        from PySide2.QtWidgets import QApplication
-
-        self.image = QApplication.clipboard().image()
-        self.data['file'] = None
-
-    def Screenshot(self):
-        #https://stackoverflow.com/questions/46773165/pyqt5-grab-and-save-section-of-screen
-        from PySide2.QtGui import QScreen, QGuiApplication
-        screen = QGuiApplication.primaryScreen()
-        pixmap = screen.grabWindow(0)
-        self.image = pixmap.toImage()
+        return stdout
 
     def CleanTemp(self):
-        pass
+        files = Path.Glob('$TEMP/nerve/images/*')
+        for file in files:
+            file.Remove()
 
     def GetFile(self):
         if not self.data['file']:
             timestamp = str(time.time()).replace('.', '_')
-            self.data['file'] = Path('$TEMP/nerve/covers/{}.png'.format(timestamp))
-            self.CleanTemp()
+            self.data['file'] = Path('$TEMP/nerve/images/{}.png'.format(timestamp))
+            #self.CleanTemp()
 
         return self.data['file']
 
+    def SetFile(self, filename=None):
+        if filename is None:
+            files = Path.Glob('$TEMP/nerve/images/*')
+            if not len(files):
+                raise Exception('No recent images found in temp folder.')
+
+            self.data['file'] = files[-1]
+            return True
+
+        self.data['file'] = Path(filename)
+    
     def GetExtension(self):
         return self.GetFile().GetExtension()
 
-    def Square(self):
-        from PySide2.QtCore import QRect
+    def SaveClipboard(self, filename=None):
+        if not filename:
+            filename = self.GetFile()
+        return self.cmd( 'clipboard:', str(filename) )
 
-        width = self.image.width()
-        height = self.image.height()
+    def GetSize(self):
+        if not self.GetFile().Exists():
+            return False
+
+        width  = self.cmd('identify', '-format', '%w', str(self.GetFile()))
+        height = self.cmd('identify', '-format', '%h', str(self.GetFile()))
+        return (int(width), int(height))
+
+    def Square(self, filename=None):
+        if not filename:
+            filename = self.GetFile()
+
+        size = self.GetSize()
+        width = size[0]
+        height = size[1]
 
         if width != height:
             if width < height:
-                rect = QRect(0, (height/2)-(width/2), width, width)
+                args = [
+                    self.GetFile().AsString(),
+                    '-crop',
+                    '{0}x{1}+{2}+{3}'.format(width, width, 0, int((height-width)/2)),
+                    '-resize',
+                    '512x512!',
+                    str(filename)
+                ]
+                self.cmd(*args)
             else:
-                rect = QRect((width/2)-(height/2), 0, height, height)
-            self.image = self.image.copy(rect)
-
-        self.image = self.image.scaled(512, 512)
-
-    def Save(self):
-        file = self.GetFile()
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
-
-        self.image.save( self.GetFile().AsString(), self.GetExtension(), 100 )
-        if not self.GetFile().Exists():
-            raise Exception('Could not save image: {}'.format( self.GetFile() ))
-
-    def SaveAs(self, filepath):
-        if not isinstance(filepath, Path):
-            filepath = Path(filepath)
-
-        self.image.save( str(filepath), filepath.GetExtension(), 100 )
-        if not filepath.Exists():
-            raise Exception('Could not save image: {}'.format(filepath))
+                args = [
+                    self.GetFile().AsString(),
+                    '-crop',
+                    '{0}x{1}+{2}+{3}'.format(height, height, int((width-height)/2), 0),
+                    '-resize',
+                    '512x512!',
+                    str(filename)
+                ]
+                self.cmd(*args)
+        else:
+            args = [
+                self.GetFile().AsString(),
+                '-resize',
+                '512x512!',
+                str(filename)
+            ]
+            self.cmd(*args)
 
     def Open(self):
-        if not self.GetFile().Exists():
-            raise Exception('File does not exist: {}.'.format(self.GetFile()))
         os.startfile(self.GetFile().AsString())
 
     def __str__(self):
         return self.GetFile().AsString()
-
+    
     def __repr__(self):
         return str(self)
 
-    def bool(self):
-        return not self.image.isNull()
-
-    def __bool__(self):
-        return self.bool()
-
-    def __nonzero__(self):
-        return self.bool()
-
-    @staticmethod
-    def SaveFromClipboard():
-        from PySide2.QtWidgets import QApplication
-        from PySide2.QtGui import QImage
-        from PySide2.QtCore import QRect
-
-        image = QApplication.clipboard().image()
-        if not image:
-            return Path('')
-
-        width = image.width()
-        height = image.height()
-
-        if width != height:
-            if width < height:
-                rect = QRect(0, (height/2)-(width/2), width, width)
-            else:
-                rect = QRect((width/2)-(height/2), 0, height, height)
-
-            image = image.copy(rect)
-
-        outpath = Path('$TEMP') + 'nerve' + str(time.time()).replace('.', '_')
-        outpath.SetExtension('png')
-
-        image.save( outpath.AsString(), 'png', 100 )
-
-        if not outpath.Exists():
-            raise Exception('Could not save image: {}.'.format(outpath))
-
-        return outpath
+    def SaveAs(self, filename):
+        args = [self.GetFile().AsString(), str(filename)]
+        self.cmd(*args)
 
 class Node:
     def __init__(self, **kwargs):
@@ -228,6 +214,8 @@ class String:
 
     @staticmethod
     def Pretty(name):
+        if len(name) <= 3:
+            return name
         return String.UnSnakeCase( String.UnCamelCase(name) )
 
 class Path:
@@ -1484,8 +1472,6 @@ class Texture(Asset):
         filepath.Copy(self.GetFilePath('session'))
         self.Create()
         return True
-        
-
     
 
 

@@ -18,7 +18,6 @@ import maya.cmds as cmds
 import maya.mel as mel
 
 class Dialog:
-
     @staticmethod
     def Input(msg='Enter Name:', title='Nerve', unique=[]):
         result = cmds.promptDialog(
@@ -500,13 +499,13 @@ class Manager(Base):
 
         if action == 'paste':
             image = nerve.Image()
-            image.Clipboard()
+            image.SaveClipboard()
             if not image:
                 print('Image not found in clipboard. Use Grab first.'),
                 return False
 
             image.Square()
-            image.Save()
+            #image.Save()
 
             cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
             return True
@@ -521,7 +520,7 @@ class Manager(Base):
             if file.GetExtension().lower() in extensions:
                 image = nerve.Image( file )
                 image.Square()
-                image.Save()
+                #image.Save()
                 cmds.iconTextButton(self.ctrl['cover'], e=True, image=image.GetFile().AsString())
             else:
                 print('Invalid file type. Skipping...'),

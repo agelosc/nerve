@@ -156,14 +156,6 @@ def PathTests():
 
     print('# Passed Path Tests.')
 
-def ImageTests():
-    image = nerve.Image()
-    file = image.GetFile()
-    assert file is not None
-    image.Load('C:/users/lemon/Desktop/test.jpg')
-
-    print('# Passed Image tests')
-
 def ShotTests():
     job = nerve.Shot()
     job.Create()
@@ -328,24 +320,33 @@ def JobTests():
 def FormatTests():
     pass
 
-
 def HDRITests():
     hdri = nerve.HDRI('hdri')
     hdri.Export('C:/users/lemon/Desktop/sunset.hdr')
 
     print('# Passed All HDRI tests')
 
-NewJob()
 
+def ImageTests():
+    image = nerve.Image()
+    #image.SaveClipboard()
+    infile = 'C:/Users/lemon/Desktop/in.jpg'
+    outfile = 'C:/Users/lemon/Desktop/out.png'
+    image.SetFile(infile)
+    image.Square(outfile)
+
+
+#NewJob()
 #PathTests()
 #ImageTests()
+ImageTests()
 #JobTests()
 #AssetTests()
 #AssetTestsOLD()
 #ShotTests()
 #SublayerTests()
 #AssetTests()
-HDRITests()
+#HDRITests()
 
 
 #AppTests()
