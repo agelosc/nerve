@@ -116,25 +116,6 @@ class Image:
         args = [self.GetFile().AsString(), str(filename)]
         self.cmd(*args)
 
-class Node:
-    def __init__(self, **kwargs):
-        self.data = {}
-        #self.data['dirty'] = True
-
-        '''
-        for require in ['name', 'type']:
-            if require not in kwargs.keys():
-                raise Exception('Node {} is required.'.format(require))
-        '''
-        for key,val in kwargs.items():
-            self.data[key] = val
-
-    def __str__(self):
-        return str(self.data)
-
-    def __repr__(self):
-        return str(self)
-
 class String:
     def __init__(self):
         pass
@@ -1474,12 +1455,53 @@ class Texture(Asset):
         cover = Image(self.GetFilePath('session'))
         cover.Square( self.GetCover() )
         return True
+
+class Material(Asset):
+    def __init__(self, path='', **kwargs):
+        kwargs['format'] = 'mat'
+        Asset.__init__(self, path, **kwargs)
+
+        self.AddReleaseMethod('Export')
+
+    def Abstract(self):
+        data = {}
+
+        data['diffuse'] = {
+            'color': (1.0, 1.0, 1.0),
+            'weight':0.8,
+            'roughness': 0.0
+        }
+        data['translucency'] = {
+            'color': (0.5, 0.5, 0.5),
+            'weight':0.0 
+        }
+        data['reflection'] = {
+            'color': (1.0, 1.0, 1.0),
+            'weight':1.0,
+            'roughness': 0.2,
+            'brdf': 'GGX',
+            'anisotropy':0.0,
+            'roation':0.0,
+            'fresnel':'Metalness',
+            'absorption': (0.0, 0.0, 0.0),
+            'reflectivity': (0.04, 0.04, 0.04),
+            'metalness': 0.0,
+            'IOR': 1.5,
+            'edge_tint':(0.0, 0.0, 0.0)
+        }
+        data['refraction'] = {
+            'color': (1.0, 1.0, 1.0),
+            'weight':0.0,
+            'roughness': 0.0,
+            'ior':1.5,
+            'dispersion': 0.0,
+            'thinWall': False
+        }
+
+        return data
     
+    def Export(self):
+        pass
 
 
-        
 
-
-    
-
-    

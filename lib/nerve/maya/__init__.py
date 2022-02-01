@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, json
 from functools import partial
 
 import nerve
@@ -16,77 +16,6 @@ class Path(nerve.Path):
         for i in range(len(path.segments)):
             path.segments[i] = path.segments[i].split(':')[-1]
         return path
-
-class Node(nerve.Node):
-    def __init__(self, **kwargs):
-        nerve.Node.__init__(self, **kwargs)
-
-    def SetDataFromScene(self, path=None):
-        if path is None:
-            path = self.data['path']
-
-        self.data['name'] = path.AsString().split('|')[-1].split(':')[-1]
-        self.data['path'] = path
-        self.data['type'] = cmds.nodeType(path)
-        self.data['app'] = 'maya'
-        self.data['classification'] = cmds.getClassification( self.data['type'] )[0]
-        self.data['hasParent'] = path.HasParent()
-        self.data['parent'] = self.GetParentData()
-        self.data['dirty'] = False
-
-    def GetParentData(self):
-        path = Path(self.data['path'])
-        if not path.HasParent():
-            return None
-        args = {}
-        args['path'] = path.GetParent()
-        args['name'] = Path(path.GetHead()).ClearNamespaces()
-        args['type'] = cmds.nodeType(self.data['path'])
-
-        return Node(**args).data
-
-    def HasParent(self):
-        return self.data['hasParent']
-
-    def GetParent(self):
-        return Node( **self.data['parent'] )
-
-    def GetPath(self):
-        return self.data['path']
-
-    def Create(self):
-        if self.data['type'] not in cmds.allNodeTypes():
-            raise Exception('Node type {} is invalid.'.format(self.data['type']))
-
-        if 'shader' in self.data['classification']:
-            return cmds.shadingNode(self.data['type'], asShader=True, name=self.data['name'])
-        else:
-            if not self.HasParent():
-                return cmds.createNode(self.data['type'], name=self.data['name'] )
-
-            # Has Parent
-            if self.GetParent().Exists():
-                return cmds.createNode(self.data['type'], name=self.data['name'], parent=self.GetParent().GetPath() )
-            else:
-                return self.GetParent().Create()
-
-    def Exists(self):
-        return cmds.objExists(self.data['path'])
-
-    @staticmethod
-    def GetSelectedNodes():
-        sel = cmds.ls(sl=True, l=True)
-        nodes = []
-        for n in sel:
-            nodes.append( Node.node(n) )
-
-        return nodes
-
-    @staticmethod
-    def node(path):
-        node = Node()
-        node.SetDataFromScene(path)
-        return node
 
 def menu():
     print("NERVE::Initialising...")
@@ -910,5 +839,238 @@ class USD(USDBase):
         kwargs['format'] = 'usd'
         self.type = 'USD'
         USDBase.__init__(self, path, **kwargs)
+
+class Material(nerve.Material, Base):
+    def __init__(self, path='', **kwargs):
+        nerve.Material.__init__(self, path, **kwargs)
+        self.SetExtension('json')
+
+        self.AddReleaseMethod('Export')
+        self.AddGatherMethod('Import')
+
+    def GetMaterialTypes(self):
+        return self.Table().keys()
+
+    def GetShadingEngines(self, obj, hierarchy=True):
+        if 'dagNode' not in cmds.nodeType(obj, inherited=True):
+            return []
+
+        objects = [obj]
+        if hierarchy:
+            objects += cmds.listRelatives(obj, allDescendents=True, fullPath=True, type='mesh') or []
+
+        shadingEngines = []
+        for n in objects:
+            if cmds.nodeType(n) != 'mesh':
+                continue
+            
+            shadingEngines+= cmds.listConnections(n, destination=True, source=False, plugs=False, type='shadingEngine') or []
+        
+        return shadingEngines
+    
+    def GetMaterials(self, objects):
+        materialTypes = self.GetMaterialTypes()
+        materials = []
+        
+        for n in objects:
+            # Shader
+            if cmds.nodeType(n) in materialTypes:
+                if n not in materials:
+                    materials.append(n)
+                continue
+
+            # Dag Node
+            if 'dagNode' in cmds.nodeType(n, inherited=True):
+                shadingEngines = self.GetShadingEngines( n )
+                for sg in shadingEngines:
+                    for attr in ['surfaceShader']:
+                        mats = cmds.listConnections( sg+'.'+attr, source=True, destination=True, plugs=False) or []
+                        for mat in mats:
+                            if cmds.nodeType(mat) in materialTypes and mat not in materials:
+                                materials.append(mat)
+                continue
+
+            # Other
+            future = cmds.listHistory(n, future=True, fastIteration=True, pruneDagObjects=True)
+            for f in future:
+                if cmds.nodeType(f) in materialTypes and f not in materials:
+                    materials.append(f)
+
+        return materials
+
+    def kwargs(self, **kwargs):
+        return kwargs
+
+    def Table(self):
+        table = {}
+        
+        if True:# Lambert
+            data = {}
+            data['diffuse'] = {
+                'color':        self.kwargs(name='color', type='color'),
+                'weight':       self.kwargs(name='diffuse', type='float'),
+            }
+            data['translucency'] = {
+                'weight':       self.kwargs(name='translucence', type='float')
+            }
+            table['lambert'] = data
+
+        if True: # RedshiftMaterial
+            data = {}
+            data['diffuse'] = {
+                'color':        self.kwargs(name='diffuse_color', type='color'),
+                'weight':       self.kwargs(name='diffuse_weight', type='float'),
+                'roughness':    self.kwargs(name='diffuse_roughness', type='float'),
+            }
+            data['translucency'] = {
+                'color':        self.kwargs(name='transl_color', type='color'),
+                'weight':       self.kwargs(name='transl_weight', type='float'),
+            }
+            data['reflection'] = {
+                'color':        self.kwargs(name='refl_color', type='color'),
+                'weight':       self.kwargs(name='refl_weight', type='float'),
+                'roughness':    self.kwargs(name='refl_roughness', type='float'),
+                'brdf':         self.kwargs(name='refl_brdf', type='option', options={0:'Beckmann', 1:'GGX', 2:'Ashikhmin-Shirley'}),
+                'anisotropy':   self.kwargs(name='refl_aniso', type='float'),
+                'roation':      self.kwargs(name='refl_aniso_rotation', type='float'),
+                'fresnel':      self.kwargs(name='refl_fresnel_mode', type='option', options={0:'IORAdvanced', 1:'EdgeTint', 2:'Metalness', 3:'IOR'}),
+                'absorption':   self.kwargs(name='refl_k30', type='color'),
+                'reflectivity': self.kwargs(name='refl_reflectivity', type='color'),
+                'metalness':    self.kwargs(name='refl_metalness', type='float'),
+                'IOR':          self.kwargs(name='refl_ior', type='float'),
+                'edge_tint':    self.kwargs(name='refl_edge_tint', type='color'),
+            }
+            data['refraction'] = {
+                'color':        self.kwargs(name='refr_color', type='color'),
+                'weight':       self.kwargs(name='refr_weight', type='float'),
+                'roughness':    self.kwargs(name='refr_roughness', type='float'),
+                'ior':          self.kwargs(name='refr_ior', type='float'),
+                'dispersion':   self.kwargs(name='refr_abbe', type='color'),
+                'thinWall':     self.kwargs(name='refr_thin_walled', type='bool'),
+            }
+            table['RedshiftMaterial'] = data
+
+        return table
+
+    def GetAttrValue(self, node, data):
+        plug = node+'.'+data['name']
+
+        atype = cmds.getAttr(plug, type=True)
+        if atype == 'float':
+            return cmds.getAttr(plug)
+        if atype == 'float3':
+            return cmds.getAttr(plug)[0]
+
+        return False
+
+    def SetAttrValue(self, node, attr, value):
+        plug = node+'.'+attr['name']
+        atype = cmds.getAttr(plug, type=True)
+        if atype == 'float':
+            cmds.setAttr(plug, value)
+            return True
+        if atype == 'float3':
+            cmds.setAttr(plug, value[0], value[1], value[2], type='double3')
+            return True
+
+        return False
+    
+    def GetTextureData(self, node):
+        data = {}
+        
+        data['filepath'] = cmds.getAttr( node + '.fileTextureName')
+        data['colorSpace'] = cmds.getAttr(node + '.colorSpace')
+        data['colorMult'] = cmds.getAttr(node + '.colorGain')[0]
+        data['colorOffset'] = cmds.getAttr(node + '.colorOffset')[0]
+        data['alphaMult'] = cmds.getAttr(node + '.alphaGain')
+        data['alphaOffset'] = cmds.getAttr(node + '.alphaOffset')
+        data['alphaIsLuminance'] = cmds.getAttr(node + '.alphaIsLuminance')
+
+        return data
+
+    def GetAttrTexture(self, node, data):
+        plug = node + '.' + data['name']
+        history = cmds.listHistory(plug, pruneDagObjects=True)
+        for n in history:
+            if cmds.nodeType(n) == 'file':
+                return self.GetTextureData(n)
+
+    def SetAttrTexture(self, node, data):
+        pass
+
+    def SetTextureData(self, node, data):
+        cmds.setAttr(node+'.fileTextureName', data['filepath'], type='string')
+        cmds.setAttr(node+'.colorSpace', data['colorSpace'], type='string')
+        # set remaing attributes
+
+    def GetAbstract(self, material):
+        mtype = cmds.nodeType(material)
+        data = self.Abstract()
+        table = self.Table()
+
+        for grp in table[mtype].keys(): # For each group (diffuse, reflection, etc)
+            for key,attr in table[mtype][grp].items(): # for each attribute data set (color, weight, etc)
+                data[grp][key] = self.GetAttrValue(material, attr) # Get Value
+                if cmds.listConnections(material + '.' + attr['name']):
+                    if 'textures' not in data[grp].keys():
+                        data[grp]['textures'] = {}
+                    data[grp]['textures'][key] = self.GetAttrTexture(material, attr)
+
+        return data
+
+    def SetAbstract(self, material, data):
+        mtype = cmds.nodeType(material)
+        table = self.Table()
+
+        for grp in table[mtype].keys():
+            for key, attr in table[mtype][grp].items():
+                self.SetAttrValue(material, attr, data[grp][key] )
+                
+            if 'textures' in data[grp].keys():
+                for key, tdata in data[grp]['textures'].items():
+                    name = key
+                    if tdata['filepath']:
+                        name = Path(tdata['filepath']).GetName()
+                    tex = cmds.shadingNode('file', asTexture=True, name=name)
+                    self.SetTextureData(tex, tdata)
+                    # Connect attributes (needs plug)
+
+    def GetConcrete(self, material):
+        return {}
+
+    def Export(self):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            print('Nothing selected.'),
+            return False
+
+        data = {'materials':[]}
+
+        materials = self.GetMaterials( sel )
+        for material in materials:
+            mdata = {'name':str(material), 'type':str(cmds.nodeType(material))}
+            mdata['abstract'] = self.GetAbstract(material)
+
+            data['materials'].append(mdata)
+
+        session = self.GetFilePath('session')
+        if not session.GetParent().Exists():
+            session.GetParent().Create()
+
+        with open(session.AsString(), 'w') as outfile:
+            json.dump(data, outfile, indent=2)
+
+        self.Create()
+
+    def Import(self, mtype='lambert'):
+        with open(self.GetFilePath('session').AsString(), 'r') as infile:
+            data = json.load(infile)
+
+        for material in data['materials']:
+            data = material['abstract']
+            mat = cmds.shadingNode(mtype, asShader=True, name=material['name'])
+            self.SetAbstract(mat, data)
+
+                
         
 
