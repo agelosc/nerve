@@ -1,4 +1,5 @@
 import os, sys, json
+import logging
 from functools import partial
 
 import nerve
@@ -65,11 +66,12 @@ class Job(nerve.Job):
         print('Project set to {}.'.format(proj)),
         return True
 
-    def Create(self):
+    def Create(self, addToRecents=True):
         # Create Job
         nerve.Job.Create(self)
         # Add To Recent Jobs
-        self.AddToRecent(self.GetDir())
+        if addToRecents:
+            self.AddToRecent(self.GetDir())
         # Create app directories
         app = nerve.apps.maya( self.GetDir() )
         app.Create()
@@ -840,21 +842,12 @@ class USD(USDBase):
         self.type = 'USD'
         USDBase.__init__(self, path, **kwargs)
 
-class Material(nerve.Material, Base):
-    def __init__(self, path='', **kwargs):
-        nerve.Material.__init__(self, path, **kwargs)
-        self.SetExtension('json')
-
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import')
-
-    def GetMaterialTypes(self):
-        return self.Table().keys()
-
-    def GetShadingEngines(self, obj, hierarchy=True):
+class Node:
+    @staticmethod
+    def GetShadingEngines(obj, hierarchy=True):
         if 'dagNode' not in cmds.nodeType(obj, inherited=True):
             return []
-
+        
         objects = [obj]
         if hierarchy:
             objects += cmds.listRelatives(obj, allDescendents=True, fullPath=True, type='mesh') or []
@@ -863,214 +856,317 @@ class Material(nerve.Material, Base):
         for n in objects:
             if cmds.nodeType(n) != 'mesh':
                 continue
-            
             shadingEngines+= cmds.listConnections(n, destination=True, source=False, plugs=False, type='shadingEngine') or []
         
-        return shadingEngines
-    
-    def GetMaterials(self, objects):
-        materialTypes = self.GetMaterialTypes()
-        materials = []
-        
-        for n in objects:
-            # Shader
-            if cmds.nodeType(n) in materialTypes:
-                if n not in materials:
-                    materials.append(n)
-                continue
+        return list(set(shadingEngines))
 
+    @staticmethod
+    def GetMaterials(sel=None):
+        if sel is None:
+            sel = cmds.ls(sl=True, l=True)
+        
+        if not isinstance(sel, list):
+            sel = [sel]
+        
+        if not len(sel):
+            return []
+        
+        materials = []
+        for n in sel:
             # Dag Node
             if 'dagNode' in cmds.nodeType(n, inherited=True):
-                shadingEngines = self.GetShadingEngines( n )
+                shadingEngines = Node.GetShadingEngines( n )
                 for sg in shadingEngines:
-                    for attr in ['surfaceShader']:
-                        mats = cmds.listConnections( sg+'.'+attr, source=True, destination=True, plugs=False) or []
-                        for mat in mats:
-                            if cmds.nodeType(mat) in materialTypes and mat not in materials:
-                                materials.append(mat)
+                    materials+=cmds.listConnections( sg+'.surfaceShader', source=True, destination=True, plugs=False) or []
+                continue
+            # Shader
+            if cmds.getClassification(cmds.nodeType(n), satisfies='shader'):
+                materials.append( n )
                 continue
 
-            # Other
+            # Other Node
             future = cmds.listHistory(n, future=True, fastIteration=True, pruneDagObjects=True)
             for f in future:
-                if cmds.nodeType(f) in materialTypes and f not in materials:
-                    materials.append(f)
-
-        return materials
-
-    def kwargs(self, **kwargs):
-        return kwargs
-
-    def Table(self):
-        table = {}
+                if cmds.getClassification(cmds.nodeType(n), satisfies='shader'):
+                    materials.append( n )
         
-        if True:# Lambert
-            data = {}
-            data['diffuse'] = {
-                'color':        self.kwargs(name='color', type='color'),
-                'weight':       self.kwargs(name='diffuse', type='float'),
-            }
-            data['translucency'] = {
-                'weight':       self.kwargs(name='translucence', type='float')
-            }
-            table['lambert'] = data
+        return list(set(materials))
 
-        if True: # RedshiftMaterial
-            data = {}
-            data['diffuse'] = {
-                'color':        self.kwargs(name='diffuse_color', type='color'),
-                'weight':       self.kwargs(name='diffuse_weight', type='float'),
-                'roughness':    self.kwargs(name='diffuse_roughness', type='float'),
-            }
-            data['translucency'] = {
-                'color':        self.kwargs(name='transl_color', type='color'),
-                'weight':       self.kwargs(name='transl_weight', type='float'),
-            }
-            data['reflection'] = {
-                'color':        self.kwargs(name='refl_color', type='color'),
-                'weight':       self.kwargs(name='refl_weight', type='float'),
-                'roughness':    self.kwargs(name='refl_roughness', type='float'),
-                'brdf':         self.kwargs(name='refl_brdf', type='option', options={0:'Beckmann', 1:'GGX', 2:'Ashikhmin-Shirley'}),
-                'anisotropy':   self.kwargs(name='refl_aniso', type='float'),
-                'roation':      self.kwargs(name='refl_aniso_rotation', type='float'),
-                'fresnel':      self.kwargs(name='refl_fresnel_mode', type='option', options={0:'IORAdvanced', 1:'EdgeTint', 2:'Metalness', 3:'IOR'}),
-                'absorption':   self.kwargs(name='refl_k30', type='color'),
-                'reflectivity': self.kwargs(name='refl_reflectivity', type='color'),
-                'metalness':    self.kwargs(name='refl_metalness', type='float'),
-                'IOR':          self.kwargs(name='refl_ior', type='float'),
-                'edge_tint':    self.kwargs(name='refl_edge_tint', type='color'),
-            }
-            data['refraction'] = {
-                'color':        self.kwargs(name='refr_color', type='color'),
-                'weight':       self.kwargs(name='refr_weight', type='float'),
-                'roughness':    self.kwargs(name='refr_roughness', type='float'),
-                'ior':          self.kwargs(name='refr_ior', type='float'),
-                'dispersion':   self.kwargs(name='refr_abbe', type='color'),
-                'thinWall':     self.kwargs(name='refr_thin_walled', type='bool'),
-            }
-            table['RedshiftMaterial'] = data
+    @staticmethod
+    def Place2dTexture(placement, textures=None):
+        if textures is None:
+            textures = cmds.ls(sl=True, l=True, type='file')
 
-        return table
+        if not isinstance(textures, list):
+            textures = [textures]
+        
+        if not len(textures):
+            return False
+
+        attribs = [
+            'coverage',
+            'translateFrame',
+            'rotateFrame',
+            'mirrorU',
+            'mirrorV',
+            'stagger',
+            'wrapU',
+            'wrapV',
+            'repeatUV',
+            'offset',
+            'rotateUV',
+            'noiseUV',
+            'vertexUvOne',
+            'vertexUvTwo',
+            'vertexUvThree',
+            'vertexCameraOne'
+        ]
+        for tex in textures:
+            for attr in attribs:
+                cmds.connectAttr(placement + '.' + attr, tex + '.' + attr, f=True)
+            cmds.connectAttr(placement + '.outUV', tex + '.uv', f=True)
+            cmds.connectAttr(placement + '.outUvFilterSize', tex + '.uvFilterSize', f=True)
+
+    @staticmethod
+    def CreateTexture(name, withPlacement=True):
+        tex = cmds.shadingNode('file', asTexture=True, isColorManaged=True, name=name)
+        if withPlacement:
+            place = cmds.shadingNode('place2dTexture', asUtility=True)
+            Node.Place2dTexture( place, tex )
+       
+        return tex
+
+    @staticmethod
+    def listHistory(plug, nodeType, **kwargs):
+        history = cmds.listHistory(plug, **kwargs)
+        for h in history:
+            if cmds.nodeType(h) == nodeType:
+                return h
+        return False
+
+class Material(nerve.Material, Base, Node):
+    logger = logging.getLogger(__name__+'.Material')
+    logger.setLevel(logging.INFO)
+
+    def __init__(self, path='', **kwargs):
+        nerve.Material.__init__(self, path, **kwargs)
+        self.SetExtension('json')
+
+        self.AddReleaseMethod('Export')
+        self.AddGatherMethod('Import')
 
     def GetAttrValue(self, node, data):
+        if not isinstance(data, dict):
+            data = {'name':data}
+
         plug = node+'.'+data['name']
-
         atype = cmds.getAttr(plug, type=True)
         if atype == 'float':
-            return cmds.getAttr(plug)
+            value = cmds.getAttr(plug)
+            if 'offset' in data.keys():
+                value+= data['offset']
+            if 'mult' in data.keys():
+                value*= data['mult']
         if atype == 'float3':
-            return cmds.getAttr(plug)[0]
+            value = cmds.getAttr(plug)[0]
+            # MATH OPERATIONS
+
+        return value
+
+    def GetAttrTexture(self, node, attr, data={}):
+        plug = node+'.'+attr
+
+        if not data: # init data
+            data = self.texture()
+
+        con = cmds.listConnections(plug)
+        if not con: # texture not found, reset all data
+            return {}
+
+        con = con[0]
+        contype = cmds.nodeType(con)
+        if contype == 'file': # texture found, set texture data
+            data['name'] = con
+            data['filepath'] = cmds.getAttr(con + '.fileTextureName')
+            data['colorSpace'] = cmds.getAttr(con + '.colorSpace')
+            data['alphaIsLuminance'] = cmds.getAttr(con+'.alphaIsLuminance')
+
+            # UV
+            uvNode = cmds.listConnections(con + '.uv', type='place2dTexture')
+            if uvNode:
+                data['uvScale'] = (cmds.getAttr(uvNode[0] + '.repeatU'), cmds.getAttr(uvNode[0] + '.repeatV'))
+                data['uvOffset'] = (cmds.getAttr(uvNode[0] + '.offsetU'), cmds.getAttr(uvNode[0] + '.offsetV'))
+                data['uvRotate'] = cmds.getAttr(uvNode[0] + '.rotateUV')
+
+            return data
+
+
+        if contype in self.GetUtilityTypes(): # utility node found.
+            table = self.GetUtilityTable( contype )
+            cc = self.GetAbstract(table['abstract'])
+            del(table['abstract'])
+            for key, attr in table.items():
+                cc[key] = self.GetAttrValue(con, attr)
+
+            data['colorCorrect'].append( cc )
+
+        # Proceed to History (until file node found.)
+        nextPlug = cmds.listConnections(con, connections=True, source=True, destination=False, plugs=True)
+        if not nextPlug: # texture not found, reset al data
+            return {}
+
+        nextCon = nextPlug[0].split('.')[0]
+        nextAttr = nextPlug[0].split('.')[-1]
+
+        return self.GetAttrTexture(nextCon, nextAttr, data)
+
+    def SetAttrValue(self, node, attr, val):
+        plug = node+'.'+attr
+        atype = cmds.getAttr(plug, type=True)
+        if atype == 'float':
+            cmds.setAttr(plug, val)
+            return True
+        if atype == 'float3':
+            cmds.setAttr(plug, val[0], val[1], val[2], type='double3')
+            return True
 
         return False
 
-    def SetAttrValue(self, node, attr, value):
-        plug = node+'.'+attr['name']
-        atype = cmds.getAttr(plug, type=True)
-        if atype == 'float':
-            cmds.setAttr(plug, value)
-            return True
-        if atype == 'float3':
-            cmds.setAttr(plug, value[0], value[1], value[2], type='double3')
-            return True
+    def SetAttrTexture(self, node, attr, data):
+        tex = Node.CreateTexture(data['name'])
+        cmds.setAttr(tex + '.fileTextureName', data['filepath'], type='string')
+        cmds.setAttr(tex + '.colorSpace', data['colorSpace'], type='string')
+        cmds.setAttr(tex + '.alphaIsLuminance', data['alphaIsLuminance'])
 
-        return False
-    
-    def GetTextureData(self, node):
-        data = {}
+        uv = cmds.listConnections(tex + '.uv', type='place2dTexture')
+        if uv:
+            uv = uv[0]
+            cmds.setAttr(uv + '.repeatU', data['uvScale'][0])
+            cmds.setAttr(uv + '.repeatV', data['uvScale'][1])
+            cmds.setAttr(uv + '.offsetU', data['uvOffset'][0])
+            cmds.setAttr(uv + '.offsetV', data['uvOffset'][1])
+            cmds.setAttr(uv + '.rotateUV', data['uvRotate'])
+
         
-        data['filepath'] = cmds.getAttr( node + '.fileTextureName')
-        data['colorSpace'] = cmds.getAttr(node + '.colorSpace')
-        data['colorMult'] = cmds.getAttr(node + '.colorGain')[0]
-        data['colorOffset'] = cmds.getAttr(node + '.colorOffset')[0]
-        data['alphaMult'] = cmds.getAttr(node + '.alphaGain')
-        data['alphaOffset'] = cmds.getAttr(node + '.alphaOffset')
-        data['alphaIsLuminance'] = cmds.getAttr(node + '.alphaIsLuminance')
+    def ConvertToAbstract(self, material):
+        mattype = cmds.nodeType(material)
+        if mattype not in self.GetMaterialTypes():
+            return {}
+        
+        data = {}
+        data['name'] = material
+        data['type'] = mattype
+        data['abstract'] = self.abstract()
 
+        table = self.GetMaterialTable( mattype ) # Convertion data
+        for grp in table.keys(): # grp: diffuse, reflection, refraction ... etc
+            for key, attr in table[grp].items(): # key: abstract attr name, attr: conversion attr name
+                plug = material+'.'+attr
+                if cmds.listConnections(plug): # Has Texture
+                    texture = self.GetAttrTexture(material, attr)
+                    #nerve.String.pprint(texture)
+                    data['abstract'][grp][key] = {'val':self.GetAttrValue(material, attr), 'tex':texture['name']}
+                    data['abstract']['textures'][texture['name']] = texture
+                else: # Does not have texture
+                    data['abstract'][grp][key] = self.GetAttrValue(material, attr)
         return data
 
-    def GetAttrTexture(self, node, data):
-        plug = node + '.' + data['name']
-        history = cmds.listHistory(plug, pruneDagObjects=True)
-        for n in history:
-            if cmds.nodeType(n) == 'file':
-                return self.GetTextureData(n)
+    def ConvertFromAbstract(self, material, abstract):
+        mattype = cmds.nodeType(material)
+        table = self.GetMaterialTable( mattype )
 
-    def SetAttrTexture(self, node, data):
-        pass
+        for grp in table.keys():
+            for key, attr in table[grp].items():
+                if isinstance(abstract[grp][key], dict):
+                    val = abstract[grp][key]['val']
+                    tex = abstract[grp][key]['tex']
+                    self.SetAttrTexture(material, attr, abstract['textures'][tex])
+                else:
+                    val = abstract[grp][key]
 
-    def SetTextureData(self, node, data):
-        cmds.setAttr(node+'.fileTextureName', data['filepath'], type='string')
-        cmds.setAttr(node+'.colorSpace', data['colorSpace'], type='string')
-        # set remaing attributes
-
-    def GetAbstract(self, material):
-        mtype = cmds.nodeType(material)
-        data = self.Abstract()
-        table = self.Table()
-
-        for grp in table[mtype].keys(): # For each group (diffuse, reflection, etc)
-            for key,attr in table[mtype][grp].items(): # for each attribute data set (color, weight, etc)
-                data[grp][key] = self.GetAttrValue(material, attr) # Get Value
-                if cmds.listConnections(material + '.' + attr['name']):
-                    if 'textures' not in data[grp].keys():
-                        data[grp]['textures'] = {}
-                    data[grp]['textures'][key] = self.GetAttrTexture(material, attr)
-
-        return data
-
-    def SetAbstract(self, material, data):
-        mtype = cmds.nodeType(material)
-        table = self.Table()
-
-        for grp in table[mtype].keys():
-            for key, attr in table[mtype][grp].items():
-                self.SetAttrValue(material, attr, data[grp][key] )
-                
-            if 'textures' in data[grp].keys():
-                for key, tdata in data[grp]['textures'].items():
-                    name = key
-                    if tdata['filepath']:
-                        name = Path(tdata['filepath']).GetName()
-                    tex = cmds.shadingNode('file', asTexture=True, name=name)
-                    self.SetTextureData(tex, tdata)
-                    # Connect attributes (needs plug)
-
-    def GetConcrete(self, material):
-        return {}
-
+                self.SetAttrValue(material, attr, val )
+        
     def Export(self):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
-            print('Nothing selected.'),
+            cmds.warning('Nothing selected.')
             return False
 
-        data = {'materials':[]}
-
+        data = {}
+        data['materials'] = {}
+        # Convert to Abstract
         materials = self.GetMaterials( sel )
         for material in materials:
-            mdata = {'name':str(material), 'type':str(cmds.nodeType(material))}
-            mdata['abstract'] = self.GetAbstract(material)
+            if cmds.nodeType(material) not in self.GetMaterialTypes():
+                continue
+            data['materials'][material] = self.ConvertToAbstract(material)
 
-            data['materials'].append(mdata)
+        # Save File
+        datafile = self.GetFilePath('session')
+        if not datafile.GetParent().Exists():
+            datafile.GetParent().Create()
 
-        session = self.GetFilePath('session')
-        if not session.GetParent().Exists():
-            session.GetParent().Create()
+        with open(datafile.AsString(), 'w') as outfile:
+            json.dump(data, outfile, indent=4)
 
-        with open(session.AsString(), 'w') as outfile:
-            json.dump(data, outfile, indent=2)
-
-        self.Create()
-
-    def Import(self, mtype='lambert'):
-        with open(self.GetFilePath('session').AsString(), 'r') as infile:
-            data = json.load(infile)
-
-        for material in data['materials']:
-            data = material['abstract']
-            mat = cmds.shadingNode(mtype, asShader=True, name=material['name'])
-            self.SetAbstract(mat, data)
-
-                
+    def Import(self, shader='lambert'):
+        datafile = self.GetFilePath('session')
+        with open( datafile.AsString(), 'r') as infile:
+            data = json.load( infile )
         
+        for name in data['materials'].keys():
+            material = cmds.shadingNode( shader, asShader=True, name=name )
+            self.ConvertFromAbstract(material, data['materials'][name]['abstract'])
 
+    def util_reverse(selfde):
+        return {
+            'abstract': 'invert',
+        }
+
+    def util_setRange(self):
+        return {
+            'abstract':'setRange',
+            'inMin': 'oldMin',
+            'inMax': 'oldMax',
+            'outMin': 'min',
+            'outMax': 'max'
+        }
+
+    def util_colorCorrect(self):
+        return {
+            'abstract': 'colorCorrect',
+
+            'hueShift': 'hueShift',
+            'staturation': 'satGain',
+            'gain': 'valGain',
+            'offset': 'colOffset',
+            'gamma': 'colGamma'
+
+        }
+    
+    def util_RedshiftColorCorrection(self):
+        return {
+            'abstract': 'colorCorrect',
+
+            'gamma': 'gamma',
+            'contrast': {'name':'contrast', 'offset':-0.5},
+            'hueShift': 'hue',
+            'saturation':'saturation',
+            'level': 'level'
+        }
+    
+    def mat_lambert(self):
+        return {
+            'diffuse': {
+                'color':'color',
+                'weight':'diffuse'
+            }
+        }
+
+    def mat_RedshiftMaterial(self):
+       return {
+            'diffuse': {
+                'color':'diffuse_color',
+                'weight':'diffuse_weight'
+            }
+        }

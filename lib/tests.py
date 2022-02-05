@@ -55,7 +55,6 @@ def PathTests():
     assert nerve.Path('R:/jobs/nerve').IsValid() is True
     assert nerve.Path('R:/jobs/nerve/').IsValid() is True
 
-
     # GetParent
     assert nerve.Path('/A/B').GetParent() == '/A'
     assert nerve.Path('/A/B/C').GetParent(2) == '/A'

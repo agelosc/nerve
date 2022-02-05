@@ -58,6 +58,7 @@ class Image:
         return self.cmd( 'clipboard:', str(filename) )
 
     def GetSize(self):
+        #print(self.GetFile())
         if not self.GetFile().Exists():
             return False
 
@@ -68,6 +69,7 @@ class Image:
     def Square(self, filename=None):
         if not filename:
             filename = self.GetFile()
+        
 
         size = self.GetSize()
         width = size[0]
@@ -102,6 +104,8 @@ class Image:
                 str(filename)
             ]
             self.cmd(*args)
+            
+        self.SetFile(filename)
 
     def Open(self):
         os.startfile(self.GetFile().AsString())
@@ -114,6 +118,7 @@ class Image:
 
     def SaveAs(self, filename):
         args = [self.GetFile().AsString(), str(filename)]
+        self.SetFile(filename)
         self.cmd(*args)
 
 class String:
@@ -1461,47 +1466,78 @@ class Material(Asset):
         kwargs['format'] = 'mat'
         Asset.__init__(self, path, **kwargs)
 
-        self.AddReleaseMethod('Export')
+        self.matdata = {}
 
-    def Abstract(self):
-        data = {}
-
-        data['diffuse'] = {
-            'color': (1.0, 1.0, 1.0),
-            'weight':0.8,
-            'roughness': 0.0
-        }
-        data['translucency'] = {
-            'color': (0.5, 0.5, 0.5),
-            'weight':0.0 
-        }
-        data['reflection'] = {
-            'color': (1.0, 1.0, 1.0),
-            'weight':1.0,
-            'roughness': 0.2,
-            'brdf': 'GGX',
-            'anisotropy':0.0,
-            'roation':0.0,
-            'fresnel':'Metalness',
-            'absorption': (0.0, 0.0, 0.0),
-            'reflectivity': (0.04, 0.04, 0.04),
-            'metalness': 0.0,
-            'IOR': 1.5,
-            'edge_tint':(0.0, 0.0, 0.0)
-        }
-        data['refraction'] = {
-            'color': (1.0, 1.0, 1.0),
-            'weight':0.0,
-            'roughness': 0.0,
-            'ior':1.5,
-            'dispersion': 0.0,
-            'thinWall': False
-        }
-
-        return data
+    def GetTypes(self, prefix):
+        return [ m.replace(prefix+'_', '') for m in dir(self) if callable(getattr(self, m)) and m.startswith(prefix+'_') ]
     
-    def Export(self):
-        pass
+    def GetTable(self, ttype, prefix):
+        if ttype not in self.GetTypes(prefix):
+            raise Exception('table not found: {}'.format(ttype))
+        return getattr(self, prefix+'_'+ttype)()
 
+    def GetMaterialTypes(self):
+        return self.GetTypes('mat')
 
+    def GetMaterialTable(self, mattype):
+        return self.GetTable(mattype, 'mat')
 
+    def GetUtilityTypes(self):
+        return self.GetTypes('util')
+
+    def GetUtilityTable(self, utiltype):
+        return self.GetTable(utiltype, 'util')
+
+    def GetAbstract(self, name):
+        if not hasattr(self, name):
+            raise Exception('{} not defined.'.format(name))
+        return getattr(self, name)()
+    
+    def abstract(self):
+        return {
+        'diffuse': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.8
+        },
+        'textures': {}
+    }
+
+    def texture(self):
+        return {
+            'name':'',
+            'filepath':'',
+            'alphaIsLuminance':False,
+            'colorSpace':'sRGB',
+            'outColor': True,
+            'uvScale':(1.0, 1.0),
+            'uvOffset': (0.0,0.0),
+            'uvRotate': 0,
+            'colorCorrect': [],
+        }
+
+    def invert(self):
+        return {
+            'type':'invert',
+            'invert':True
+        }
+
+    def colorCorrect(self):
+        return {
+            'type':'colorCorrect',
+            'saturation': 1.0,
+            'contrast': 1.0,
+            'gamma': 1.0,
+            'gain':1.0,
+            'hueShift': 0.0,
+            'offset':0.0
+        }
+
+    def setRange(self):
+        return {
+            'type':'setRange',
+            'inMin':0,
+            'inMax':1,
+            'outMin':0,
+            'outMax':1,
+            'clamp': True
+        }        
