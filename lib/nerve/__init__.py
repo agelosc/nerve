@@ -1512,32 +1512,17 @@ class Material(Asset):
             'uvScale':(1.0, 1.0),
             'uvOffset': (0.0,0.0),
             'uvRotate': 0,
-            'colorCorrect': [],
+            'colorCorrect': self.colorCorrect(),
         }
-
-    def invert(self):
-        return {
-            'type':'invert',
-            'invert':True
-        }
-
+        
     def colorCorrect(self):
         return {
-            'type':'colorCorrect',
-            'saturation': 1.0,
+            'saturation':1.0,
             'contrast': 1.0,
+            'hue':0.0,
             'gamma': 1.0,
-            'gain':1.0,
-            'hueShift': 0.0,
-            'offset':0.0
+            'gain': 1.0,
+            'offset': 0.0,
+            'invert':False,
+            'range': (0,1,0,1) # inmin, inmax, outmin, outmax
         }
-
-    def setRange(self):
-        return {
-            'type':'setRange',
-            'inMin':0,
-            'inMax':1,
-            'outMin':0,
-            'outMax':1,
-            'clamp': True
-        }        

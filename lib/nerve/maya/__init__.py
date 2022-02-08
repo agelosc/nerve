@@ -901,7 +901,7 @@ class Node:
         return list(set(materials))
 
     @staticmethod
-    def Place2dTexture(placement, textures=None):
+    def uvtexture(placement, textures=None):
         if textures is None:
             textures = cmds.ls(sl=True, l=True, type='file')
 
@@ -936,15 +936,6 @@ class Node:
             cmds.connectAttr(placement + '.outUvFilterSize', tex + '.uvFilterSize', f=True)
 
     @staticmethod
-    def CreateTexture(name, withPlacement=True):
-        tex = cmds.shadingNode('file', asTexture=True, isColorManaged=True, name=name)
-        if withPlacement:
-            place = cmds.shadingNode('place2dTexture', asUtility=True)
-            Node.Place2dTexture( place, tex )
-       
-        return tex
-
-    @staticmethod
     def listHistory(plug, nodeType, **kwargs):
         history = cmds.listHistory(plug, **kwargs)
         for h in history:
@@ -977,7 +968,7 @@ class Node:
 
     @staticmethod
     def getAttr(node, attr):
-        return cmds.getAttr(node+'.'+attr)
+        return Node.GetAttrData(node, attr)['value']
 
     @staticmethod
     def listAttr(node):
@@ -1005,41 +996,55 @@ class Node:
         plug = node+'.'+attr
         atype = cmds.getAttr(plug, type=True)
 
+        data = {}
+        data['name'] = attr
+        if cmds.listConnections(plug):
+            innode = cmds.listConnections(plug)[0]
+            inplug = cmds.listConnections(plug, plugs=True)[0]
+            data['node'] = innode
+            data['plug'] = inplug.replace(innode, '')[1:]
+
         if atype in ['float', 'double', 'doubleAngle']:
-            value = cmds.getAttr(plug)
-            default = cmds.attributeQuery(attr, n=node, listDefault=True)[0]
-            return {'name':attr, 'value':value, 'type':'float', 'default':default}
+            data['value'] = cmds.getAttr(plug)
+            data['default'] = cmds.attributeQuery(attr, n=node, listDefault=True)[0]
+            data['type'] = 'float'
+            return data
 
         if atype == 'float2':
-            value = cmds.getAttr(plug)[0]
-            default = tuple(cmds.attributeQuery(attr, n=node, listDefault=True))
-            return {'name':attr, 'value':value, 'type':'vector2', 'default':default}
+            data['value'] = cmds.getAttr(plug)[0]
+            data['default'] = tuple(cmds.attributeQuery(attr, n=node, listDefault=True))
+            data['type'] = 'vector2'
+            return data
 
         if atype == 'float3':
-            value = cmds.getAttr(plug)[0]
-            default = tuple(cmds.attributeQuery(attr, n=node, listDefault=True) or [0,0,0])
-            return {'name':attr, 'value':value, 'type':'vector', 'default':default}
+            data['value'] = cmds.getAttr(plug)[0]
+            data['default'] = tuple(cmds.attributeQuery(attr, n=node, listDefault=True) or [0,0,0])
+            data['type'] = 'vector'
+            return data
 
         if atype == 'bool':
-            value = cmds.getAttr(plug)
-            default = bool(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
-            return {'name':attr, 'value':value, 'type':'bool', 'default':default}
+            data['value'] = cmds.getAttr(plug)
+            data['default'] = bool(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
+            data['type'] = 'bool'
+            return data
 
         if atype == 'short' or atype == 'long':
-            value = cmds.getAttr(plug)
-            default = int(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
-            return {'name':attr, 'value':value, 'type':'int', 'default':default}
+            data['value'] = cmds.getAttr(plug)
+            data['default'] = int(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
+            data['type'] = 'int'
+            return data
 
         if atype == 'enum':
-            enums = cmds.attributeQuery(attr, n=node, listEnum=True)[0].split(':')
-            value = cmds.getAttr(plug)
-            default = int(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
-            return {'name':attr, 'value':value, 'type':'enum', 'default':default, 'options':enums}
+            data['options'] = cmds.attributeQuery(attr, n=node, listEnum=True)[0].split(':')
+            data['value'] = cmds.getAttr(plug)
+            data['default'] = int(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
+            return data
 
         if atype == 'string':
-            value = cmds.getAttr(plug) or ''
-            default = cmds.attributeQuery(attr, n=node, listDefault=True) or ''
-            return {'name':attr, 'value':value, 'type':'string', 'default':default}
+            data['value'] = cmds.getAttr(plug) or ''
+            data['default'] = cmds.attributeQuery(attr, n=node, listDefault=True) or ''
+            data['type'] = 'string'
+            return data
         
         raise Exception('attribute type not defined:'+ atype)
 
@@ -1057,20 +1062,18 @@ class Node:
             if attrdata['default'] != attrdata['value']:
                 self.data['attr'][attr] = {'value':attrdata['value']}
 
-            if cmds.listConnections(self.node + '.' + attr):
-                if attr not in self.data['attr'].keys():
+            if 'node' in attrdata.keys():
+                if attr not in self.data['attr'].keys(): # create attr dict
                     self.data['attr'][attr] = {}
 
-                node = cmds.listConnections(self.node + '.' + attr)[0]
-                nodeClean = Node.CleanName(node)
-                plug = cmds.listConnections(self.node + '.' + attr, plugs=True)[0]
+                nodeClean = Node.CleanName( attrdata['node'] )
                 self.data['attr'][attr]['node'] = nodeClean
-                self.data['attr'][attr]['plug'] = plug.replace(node, '')[1:]
+                self.data['attr'][attr]['plug'] = attrdata['plug']
 
                 if nodeClean not in history.keys():
                     history[nodeClean] = {}
-                    history[nodeClean] = Node(node).Serialize( history )
-        
+                    history[nodeClean] = Node( attrdata['node'] ).Serialize( history )
+
         return self.data
 
     def Unserialize(self, data, history=None, clearNamespace=True):
@@ -1108,6 +1111,12 @@ class Node:
         if name:
             args['name'] = name
 
+        if ntype == 'file':
+            tex = cmds.shadingNode('file', asTexture=True, isColorManaged=True, **args)
+            uv = cmds.shadingNode('place2dTexture', asUtility=True)
+            Node.uvtexture(uv, tex)
+            return tex
+
         if cmds.getClassification(ntype, satisfies='shader'):
             return cmds.shadingNode(ntype, asShader=True, **args)
         if cmds.getClassification(ntype, satisfies='utility'):
@@ -1117,10 +1126,7 @@ class Node:
         
         return cmds.createNode(ntype, **args)
 
-class Material(nerve.Material, Base, Node):
-    logger = logging.getLogger(__name__+'.Material')
-    logger.setLevel(logging.INFO)
-
+class Material(nerve.Material, Base):
     def __init__(self, path='', **kwargs):
         nerve.Material.__init__(self, path, **kwargs)
         self.SetExtension('json')
@@ -1128,51 +1134,66 @@ class Material(nerve.Material, Base, Node):
         self.AddReleaseMethod('Export')
         self.AddGatherMethod('Import')
 
-    def GetAttrValue(self, node, data):
-        if not isinstance(data, dict):
-            data = {'name':data}
+    def ConvertFromAbstract(self, material, data):
+        mattype = cmds.nodeType(material)
 
-        plug = node+'.'+data['name']
-        atype = cmds.getAttr(plug, type=True)
-        if atype == 'float' or atype == 'double':
-            value = cmds.getAttr(plug)
-            return value
-        if atype == 'float3':
-            value = cmds.getAttr(plug)[0]
-            return value
-        if atype == 'bool':
-            value = cmds.getAttr(plug)
-            return value
-        if atype == 'short' or atype == 'long':
-            value = cmds.getAttr(plug)
-            return value
-        if atype == 'enum':
-            enums = cmds.attributeQuery(data['name'], n=node, listEnum=True)[0].split(':')
-            value = cmds.getAttr(plug)
-            return (value, enums)
-        if atype == 'string':
-            return cmds.getAttr(plug)
+        table = self.GetMaterialTable( mattype )
+        for grp in table.keys(): # grp: diffuse, reflection, refraction etc
+            for key, attr in table[grp].items(): # key: abstract attr name, attr: concrete attr name
+                if isinstance(data[grp][key], dict): # Has Texture
+                    Node.setAttr( material, attr, data[grp][key]['value'])
+                    tex = self.SetTextureData( data[grp][key]['texture'] )
+                    atype = cmds.getAttr(material+'.'+attr, type=True)
+                    if atype == 'float3':
+                        cmds.connectAttr( tex + '.outColor', material+'.'+attr, f=True)
+                    if atype == 'float':
+                        cmds.connectAttr( tex + '.outAlpha', material+'.'+attr, f=True)
+                else: # Does not have texture
+                    val = data[grp][key]
+                    Node.setAttr( material, attr, val )
+
+    def GetTextureColorCorrectData(self, node, cc):
+        ntype = cmds.nodeType(node)
+        if ntype == 'setRange':
+            inmin = cmds.getAttr(node+'.oldMin')[0]
+            inmax = cmds.getAttr(node+'.oldMax')[0]
+            outmin = cmds.getAttr(node+'.min')[0]
+            outmax = cmds.getAttr(node+'.max')[0]
+
+            cc['range'] = (inmin[0], inmax[0], outmin[0], outmax[0])
+        return cc
+
+    def SetTextureData(self, data):
+        tex = Node.create('file', data['name'])
+        uv = cmds.listConnections(tex + '.uv')[0]
+
+        Node.setAttr(tex, 'fileTextureName', data['filepath'])
+        Node.setAttr(tex, 'colorSpace', data['colorSpace'])
+        Node.setAttr(tex, 'alphaIsLuminance', data['alphaIsLuminance'])
+        Node.setAttr(uv, 'repeatU', data['uvScale'][0])
+        Node.setAttr(uv, 'repeatV', data['uvScale'][1])
+        Node.setAttr(uv, 'offsetU', data['uvOffset'][0])
+        Node.setAttr(uv, 'offsetV', data['uvOffset'][1])
+        Node.setAttr(uv, 'rotateUV', data['uvRotate'])
+
+        return tex
         
-        raise Exception('attribute type not defined: {}'.format(atype))
-
-    def GetAttrTexture(self, node, attr, data={}):
-        plug = node+'.'+attr
-
-        if not data: # init data
+    def GetTextureData(self, node, attr, data=None):
+        if not data:
             data = self.texture()
 
+        plug = node+'.'+attr
         con = cmds.listConnections(plug)
-        if not con: # texture not found, reset all data
+        if not con: # texture not found, return empty
             return {}
 
         con = con[0]
         contype = cmds.nodeType(con)
-        if contype == 'file': # texture found, set texture data
-            data['name'] = con
+        if contype == 'file': # Texture found, return data
+            data['name'] = Node.CleanName(con)
             data['filepath'] = cmds.getAttr(con + '.fileTextureName')
             data['colorSpace'] = cmds.getAttr(con + '.colorSpace')
-            data['alphaIsLuminance'] = cmds.getAttr(con+'.alphaIsLuminance')
-
+            data['alphaIsLuminance'] = cmds.getAttr(con + '.alphaIsLuminance')
             # UV
             uvNode = cmds.listConnections(con + '.uv', type='place2dTexture')
             if uvNode:
@@ -1180,65 +1201,25 @@ class Material(nerve.Material, Base, Node):
                 data['uvOffset'] = (cmds.getAttr(uvNode[0] + '.offsetU'), cmds.getAttr(uvNode[0] + '.offsetV'))
                 data['uvRotate'] = cmds.getAttr(uvNode[0] + '.rotateUV')
 
+            # Color Correct
+            gain = Node.getAttr(con, 'colorGain')
+            offset = Node.getAttr(con, 'colorOffset')
+            
+            data['colorCorrect']['gain']*=gain[0]
+            data['colorCorrect']['offset']+=offset[0]
             return data
 
-
-        if contype in self.GetUtilityTypes(): # utility node found.
-            table = self.GetUtilityTable( contype )
-            cc = self.GetAbstract(table['abstract'])
-            for key, attr in table['attr'].items():
-                cc[key] = self.GetAttrValue(con, attr)
-
-            data['colorCorrect'].append( cc )
-
-        # Proceed to History (until file node found.)
+        # Color Correct
+        data['colorCorrect'] = self.GetTextureColorCorrectData( con, data['colorCorrect'])
+        
+        # Next Node
         nextPlug = cmds.listConnections(con, connections=True, source=True, destination=False, plugs=True)
         if not nextPlug: # texture not found, reset al data
-            return {}
-
+            return {}        
         nextCon = nextPlug[0].split('.')[0]
         nextAttr = nextPlug[0].split('.')[-1]
 
-        return self.GetAttrTexture(nextCon, nextAttr, data)
-
-    def SetAttrValue(self, node, data, val):
-        if not isinstance(data, dict):
-            data = {'name':data}
-
-        plug = node+'.'+data['name']
-        atype = cmds.getAttr(plug, type=True)
-        if atype == 'float':
-            cmds.setAttr(plug, val)
-            return True
-        if atype == 'float3':
-            cmds.setAttr(plug, val[0], val[1], val[2], type='double3')
-            return True
-
-        return False
-
-    def SetAttrTexture(self, node, attr, data):
-        tex = Node.CreateTexture(data['name'])
-        cmds.setAttr(tex + '.fileTextureName', data['filepath'], type='string')
-        cmds.setAttr(tex + '.colorSpace', data['colorSpace'], type='string')
-        cmds.setAttr(tex + '.alphaIsLuminance', data['alphaIsLuminance'])
-
-        uv = cmds.listConnections(tex + '.uv', type='place2dTexture')
-        if uv:
-            uv = uv[0]
-            cmds.setAttr(uv + '.repeatU', data['uvScale'][0])
-            cmds.setAttr(uv + '.repeatV', data['uvScale'][1])
-            cmds.setAttr(uv + '.offsetU', data['uvOffset'][0])
-            cmds.setAttr(uv + '.offsetV', data['uvOffset'][1])
-            cmds.setAttr(uv + '.rotateUV', data['uvRotate'])
-
-        plug = tex + '.outColor'
-        for util in data['colorCorrect']:
-            if util['type'] in self.GetUtilityTypes():
-                table = self.GetUtilityTable( util['type'] )
-                cc = self.GetAbstract( table['abstract'] )
-                node = cmds.shadingNode( table['concrete'], asUtility=True)
-                for key, attr in table['attr'].items():
-                    self.SetAttrValue(node, attr, util[key])
+        return self.GetTextureData(nextCon, nextAttr, data)
 
     def ConvertToAbstract(self, material):
         mattype = cmds.nodeType(material)
@@ -1248,88 +1229,33 @@ class Material(nerve.Material, Base, Node):
         data = self.abstract()
         table = self.GetMaterialTable( mattype ) # Convertion data
         for grp in table.keys(): # grp: diffuse, reflection, refraction ... etc
-            for key, attr in table[grp].items(): # key: abstract attr name, attr: conversion attr name
-                plug = material+'.'+attr
-                if cmds.listConnections(plug): # Has Texture
-                    texture = self.GetAttrTexture(material, attr)
-                    #nerve.String.pprint(texture)
-                    data[grp][key] = {'val':self.GetAttrValue(material, attr), 'tex':texture['name']}
-                    data['textures'][texture['name']] = texture
-                else: # Does not have texture
-                    data[grp][key] = self.GetAttrValue(material, attr)
+            for key, attr in table[grp].items(): # key: abstract attr name, attr: concrete attr name
+                attrdata = Node.GetAttrData(material, attr)
+                data[grp][key] = attrdata['value']
+                if 'node' in attrdata.keys():
+                    data[grp][key] = {}
+                    data[grp][key]['value'] = attrdata['value']
+                    data[grp][key]['texture'] = self.GetTextureData( material, attr )
         return data
 
-    def ConvertFromAbstract(self, material, abstract):
-        mattype = cmds.nodeType(material)
-        table = self.GetMaterialTable( mattype )
-
-        for grp in table.keys():
-            for key, attr in table[grp].items():
-                if isinstance(abstract[grp][key], dict):
-                    val = abstract[grp][key]['val']
-                    tex = abstract[grp][key]['tex']
-                    self.SetAttrTexture(material, attr, abstract['textures'][tex])
-                else:
-                    val = abstract[grp][key]
-                    self.SetAttrValue(material, attr, val )
-        
-    def GetConcrete(self, material):
-        mattype = cmds.nodeType(material)
-        data = {}
-        data['nodes'] = {}
-
-        for attr in Node.listAttr(material):
-            cdata = self.GetConcreteAttr(material, attr, data)
-            if cdata:
-                data[attr] = cdata
-
-            #plug = material +'.'+ attr
-            #adata = Node.GetAttrData(material, attr)
-            #con = cmds.listConnections(plug, source=True, destination=False, plugs=True)
-
-        return data
-
-    def GetConcreteAttr(self, node, attr, data):
-        plug = node + '.' + attr
-        outdata = {}
-        adata = Node.GetAttrData(node, attr)
-        if adata['default'] != adata['value']:
-            outdata['value'] = adata['value']
-
-        if cmds.listConnections(plug):
-            innode = cmds.listConnections(plug)[0]
-            inplug = cmds.listConnections(plug, plugs=True)[0]
-            inattr = inplug.replace(innode+'.', '')
-
-            outdata['plug'] = inattr
-            outdata['node'] = innode
-            if innode not in data['nodes'].keys():
-                data['nodes'][innode] = {}
-                for innodeAttr in Node.listAttr(innode):
-                    cdata = self.GetConcreteAttr(innode, innodeAttr, data )
-                    if cdata:
-                        data['nodes'][innode][innodeAttr] = cdata
-            
-        return outdata
-
-    def Export(self):
+    def Export(self, concrete=True, abstract=True):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
             cmds.warning('Nothing selected.')
             return False
 
         data = {}
-        # Convert to Abstract
-        materials = self.GetMaterials( sel )
+        materials = Node.GetMaterials( sel )
         for material in materials:
             data[material] = {}
-            data[material]['name'] = material
+            data[material]['name'] = Node.CleanName(material)
             data[material]['type'] = cmds.nodeType(material)
-            data[material]['concrete'] = Node(material).Serialize()
-            #nerve.String.pprint(data[material]['concrete'])
-            #if cmds.nodeType(material) not in self.GetMaterialTypes():
-                #continue
-           # data[material]['abstract'] = self.ConvertToAbstract(material)
+            # Concrete
+            if concrete:
+                data[material]['concrete'] = Node(material).Serialize()
+            # Abstract
+            if abstract and cmds.nodeType(material) in self.GetMaterialTypes():
+               data[material]['abstract'] = self.ConvertToAbstract(material)
 
         # Save File
         datafile = self.GetFilePath('session')
@@ -1343,62 +1269,17 @@ class Material(nerve.Material, Base, Node):
         datafile = self.GetFilePath('session')
         with open( datafile.AsString(), 'r') as infile:
             indata = json.load( infile )
-        
-        for name, data in indata.items():
+
+        #print('')
+        #nerve.String.pprint(indata)
+
+        for name, data in indata.items(): # material, material data
             if 'concrete' in data.keys() and data['concrete']['type'] == shader:
                 Node(name).Unserialize(data['concrete'])
-               
+                continue
             
-            #material = cmds.shadingNode( shader, asShader=True, name=name )
-            #self.ConvertFromAbstract(material, data['materials'][name]['abstract'])
-
-    def util_reverse(selfde):
-        return {
-            'abstract': 'invert',
-            'concrete': 'reverse',
-            'attr': {}
-        }
-
-    def util_setRange(self):
-        return {
-            'abstract':'setRange',
-            'concrete':'setRange',
-
-            'attr': {
-                'inMin': 'oldMin',
-                'inMax': 'oldMax',
-                'outMin': 'min',
-                'outMax': 'max'
-            }
-        }
-
-    def util_colorCorrect(self):
-        return {
-            'abstract': 'colorCorrect',
-            'concrete': 'colorCorrect',
-            
-            'attr': {
-                'hueShift': 'hueShift',
-                'staturation': 'satGain',
-                'gain': 'valGain',
-                'offset': 'colOffset',
-                'gamma': 'colGamma'
-            }
-        }
-    
-    def util_RedshiftColorCorrection(self):
-        return {
-            'abstract': 'colorCorrect',
-            'concrete': 'RedshiftColorCorrection',
-            
-            'attr': {
-                'gamma': 'gamma',
-                'contrast': {'name':'contrast', 'offset':-0.5},
-                'hueShift': 'hue',
-                'saturation':'saturation',
-                'level': 'level'
-            }
-        }
+            material = cmds.shadingNode( shader, asShader=True, name=name )
+            self.ConvertFromAbstract(material, data['abstract'])
     
     def mat_lambert(self):
         return {
@@ -1414,4 +1295,21 @@ class Material(nerve.Material, Base, Node):
                 'color':'diffuse_color',
                 'weight':'diffuse_weight'
             }
+        }
+
+    def mat_usdPreviewSurface(self):
+        return {
+            'diffuse': {
+                'color': 'diffuseColor'
+            }
+
+        }
+
+    def mat_standardSurface(self):
+        return {
+            'diffuse': {
+                'color': 'baseColor',
+                'weight': 'base'
+            }
+
         }
