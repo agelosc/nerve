@@ -160,18 +160,52 @@ class MayaMaterial(Base):
         material.Gather()
         '''
         
-    def test_4_concrete(self):
+    def _test_4_concrete(self):
         self.NewScene()
         net = self.CreateLambertNetwork()
-        cmds.setAttr(net['mat'] + '.translucence', 0.44)
+
+        # set values
+        matdata = {'translucence':0.1, 'translucenceDepth':0.2, 'ambientColor':(0.1, 0.2, 0.3) } 
+        for attr,val in matdata.items():
+            nerve.maya.Node.setAttr(net['mat'], attr, val)
+        ccdata = {'hueShift':0.1, 'satGain':0.2, 'valGain':0.3, 'colGain':(0.2, 0.3, 0.1), 'colGamma':(0.46, 0.46, 0.46) }
+        for attr,val in ccdata.items():
+            nerve.maya.Node.setAttr(net['cc'], attr, val)
+        srdata = {'min':(1,2,3), 'max':(4,5,6), 'oldMin':(7,8,9), 'oldMax':(10,11,12)}
+        for attr,val in srdata.items():
+            nerve.maya.Node.setAttr(net['setRange'], attr, val)
 
         cmds.select(net['mat'], r=True)
         material = nerve.maya.Material('lambert', version=1)
         material.Release()
 
         self.NewScene()
-        #cmds.shadingNode('setRange', asUtility=True, name='colorTex')
+        # Create clashing node name
+        cmds.shadingNode('setRange', asUtility=True, name='colorTex')
         material.Gather()
+
+        for attr,val in matdata.items():
+            self.assertTrue( nerve.maya.Node.getAttr(net['mat'], attr), val )
+        for attr, val in ccdata.items():
+            self.assertTrue( nerve.maya.Node.getAttr(net['cc'], attr), val )
+        for attr, val in srdata.items():
+            self.assertTrue( nerve.maya.Node.getAttr(net['setRange'], attr), val )
+
+    def test_5_concreteWithNamespace(self):
+        self.NewScene()
+        ns = 'NS'
+        cmds.namespace(add=ns)
+        cmds.namespace(setNamespace=ns)
+        net = self.CreateLambertNetwork()
+
+        cmds.select(net['mat'], r=True)
+        material = nerve.maya.Material('lambert', version=1)
+        material.Release()
+
+        self.NewScene()
+        #cmds.namespace(setNamespace=':')
+        material.Gather()
+        
 
 
 class Maya(unittest.TestCase):

@@ -848,6 +848,10 @@ class Node:
         self.data = {}
 
     @staticmethod
+    def CleanName(name):
+        return name.split(':')[-1]
+
+    @staticmethod
     def GetShadingEngines(obj, hierarchy=True):
         if 'dagNode' not in cmds.nodeType(obj, inherited=True):
             return []
@@ -995,77 +999,6 @@ class Node:
             attributes.append(attr)
 
         return attributes
-        
-    def Serialize(self, history=None):
-        self.data['name'] = self.node
-        self.data['type'] = cmds.nodeType(self.node)
-        self.data['attr'] = {}
-
-        if history is None:
-            self.data['history'] = {}
-            history = self.data['history']
-
-        for attr in Node.listAttr(self.node):
-            attrdata = Node.GetAttrData(self.node, attr)
-            if attrdata['default'] != attrdata['value']:
-                self.data['attr'][attr] = {'value':attrdata['value']}
-
-            if cmds.listConnections(self.node + '.' + attr):
-                if attr not in self.data['attr'].keys():
-                    self.data['attr'][attr] = {}
-
-                node = cmds.listConnections(self.node + '.' + attr)[0]
-                plug = cmds.listConnections(self.node + '.' + attr, plugs=True)[0]
-                self.data['attr'][attr]['node'] = node
-                self.data['attr'][attr]['plug'] = plug.replace(node, '')[1:]
-
-                if node not in history.keys():
-                    history[node] = {}
-                    history[node] = Node(node).Serialize( history )
-        
-        return self.data
-
-    def Unserialize(self, data, history=None):
-        #nerve.String.pprint(data)
-        
-        if history is None:
-            history = data['history']
-        
-        data['name'] = Node.create(data['type'], data['name'])
-        for attr,adata in data['attr'].items():
-
-            if 'value' in adata.keys(): # Set Attr
-                Node.setAttr(data['name'], attr, adata['value'])
-
-            if 'node' in adata.keys(): # Connect Node
-                node = adata['node']
-                if not cmds.objExists(node): 
-                    Node( node ).Unserialize( history[node], history )
-                    cmds.connectAttr( node + '.' + adata['plug'], data['name']+'.'+attr, f=True )
-        
-    @staticmethod
-    def create(ntype, name=None):
-        args = {}
-        if name:
-            args['name'] = name
-
-        if cmds.getClassification(ntype, satisfies='shader'):
-            return cmds.shadingNode(ntype, asShader=True, **args)
-        if cmds.getClassification(ntype, satisfies='utility'):
-            return cmds.shadingNode(ntype, asUtility=True, **args)
-        if cmds.getClassification(ntype, satisfies='texture'):
-            return cmds.shadingNode(ntype, asTexture=True, **args)
-        
-        return cmds.createNode(ntype, **args)
-
-    @staticmethod
-    def GetPlugData(node, attr):
-        plug = node + '.' + attr
-        if not cmds.listConnections(plug):
-            return {}
-        con = cmds.listConnections(plug, source=True, destination=False, plugs=True)
-        data = {}
-        return data
 
     @staticmethod
     def GetAttrData(node, attr):
@@ -1109,6 +1042,80 @@ class Node:
             return {'name':attr, 'value':value, 'type':'string', 'default':default}
         
         raise Exception('attribute type not defined:'+ atype)
+
+    def Serialize(self, history=None):
+        self.data['name'] = Node.CleanName(self.node)
+        self.data['type'] = cmds.nodeType(self.node)
+        self.data['attr'] = {}
+
+        if history is None:
+            self.data['history'] = {}
+            history = self.data['history']
+
+        for attr in Node.listAttr(self.node):
+            attrdata = Node.GetAttrData(self.node, attr)
+            if attrdata['default'] != attrdata['value']:
+                self.data['attr'][attr] = {'value':attrdata['value']}
+
+            if cmds.listConnections(self.node + '.' + attr):
+                if attr not in self.data['attr'].keys():
+                    self.data['attr'][attr] = {}
+
+                node = cmds.listConnections(self.node + '.' + attr)[0]
+                nodeClean = Node.CleanName(node)
+                plug = cmds.listConnections(self.node + '.' + attr, plugs=True)[0]
+                self.data['attr'][attr]['node'] = nodeClean
+                self.data['attr'][attr]['plug'] = plug.replace(node, '')[1:]
+
+                if nodeClean not in history.keys():
+                    history[nodeClean] = {}
+                    history[nodeClean] = Node(node).Serialize( history )
+        
+        return self.data
+
+    def Unserialize(self, data, history=None, clearNamespace=True):
+        # Namespace
+        ns = 'nrv'
+        cmds.namespace(setNamespace=':')
+        if not cmds.namespace(exists=ns):
+            cmds.namespace(add=ns)
+        cmds.namespace(setNamespace=ns)
+
+        # History
+        if history is None:
+            history = data['history']
+        
+        data['name'] = Node.create(data['type'], data['name'])
+        for attr,adata in data['attr'].items():
+
+            if 'value' in adata.keys(): # Set Attr
+                Node.setAttr(data['name'], attr, adata['value'])
+
+            if 'node' in adata.keys(): # Connect Node
+                node = adata['node']
+                nodens = ns+':'+adata['node']
+                if not cmds.objExists(nodens): 
+                    Node( node ).Unserialize( history[node], history, False )
+                    cmds.connectAttr( nodens + '.' + adata['plug'], data['name']+'.'+attr, f=True )
+
+        cmds.namespace(setNamespace=':')
+        if clearNamespace:
+            cmds.namespace(removeNamespace=ns, mergeNamespaceWithRoot=True, f=True)
+
+    @staticmethod
+    def create(ntype, name=None):
+        args = {}
+        if name:
+            args['name'] = name
+
+        if cmds.getClassification(ntype, satisfies='shader'):
+            return cmds.shadingNode(ntype, asShader=True, **args)
+        if cmds.getClassification(ntype, satisfies='utility'):
+            return cmds.shadingNode(ntype, asUtility=True, **args)
+        if cmds.getClassification(ntype, satisfies='texture'):
+            return cmds.shadingNode(ntype, asTexture=True, **args)
+        
+        return cmds.createNode(ntype, **args)
 
 class Material(nerve.Material, Base, Node):
     logger = logging.getLogger(__name__+'.Material')
@@ -1340,6 +1347,7 @@ class Material(nerve.Material, Base, Node):
         for name, data in indata.items():
             if 'concrete' in data.keys() and data['concrete']['type'] == shader:
                 Node(name).Unserialize(data['concrete'])
+               
             
             #material = cmds.shadingNode( shader, asShader=True, name=name )
             #self.ConvertFromAbstract(material, data['materials'][name]['abstract'])
