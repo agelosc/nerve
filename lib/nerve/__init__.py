@@ -1479,6 +1479,28 @@ class Material(Asset):
     def GetMaterialTypes(self):
         return self.GetTypes('mat')
 
+    def GetConvertTable(self, src, dest, prefix='mat'):
+        data = self.abstract()
+        stable = self.GetTable(src, prefix)
+        dtable = self.GetTable(dest, prefix)
+
+        for grp in data.keys():
+            for key, val in data[grp].items():
+                sval = None
+                if grp in stable.keys() and key in stable[grp].keys():
+                    sval = stable[grp][key]
+                
+                dval = None
+                if grp in dtable.keys() and key in dtable[grp].keys():
+                    dval = dtable[grp][key]
+                    
+                data[grp][key] = { 'src': sval, 'dest':dval }
+            
+        return data
+
+    def GetMaterialConvertTable(self, src, dest):
+        return self.GetConvertTable(src, dest, prefix='mat')
+
     def GetMaterialTable(self, mattype):
         return self.GetTable(mattype, 'mat')
 

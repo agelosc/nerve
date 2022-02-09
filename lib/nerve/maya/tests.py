@@ -24,14 +24,18 @@ class Base(unittest.TestCase):
         alpha = nerve.maya.Node.create('file', 'alphaTex')
         setRange = cmds.shadingNode('setRange', asUtility=True)
         reverse = cmds.shadingNode('reverse', asUtility=True)
+        sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name='lambert_SG')
 
         cmds.connectAttr(tex + '.outColor', cc + '.inColor', f=True)
         cmds.connectAttr(cc + '.outColor', mat + '.color', f=True)
         cmds.connectAttr(alpha + '.outColor', setRange + '.value', f=True)
         cmds.connectAttr(setRange + '.outValue', reverse + '.input', f=True)
         cmds.connectAttr(reverse + '.outputX', mat + '.diffuse', f=True)
+        cmds.connectAttr(mat + '.outColor', sg+'.surfaceShader', f=True)
 
-        return {'mat':mat, 'tex':tex, 'cc':cc, 'alpha':alpha, 'setRange':setRange, 'reverse':reverse}
+        result = {'mat':mat, 'tex':tex, 'cc':cc, 'alpha':alpha, 'setRange':setRange, 'reverse':reverse, 'sg':sg}
+
+        return result
 
     def CreateLambert(self, name, assign=None):
         mat = cmds.shadingNode('lambert', asShader=True, name=name)
@@ -190,7 +194,8 @@ class MayaMaterial(Base):
         material.Gather(shader='standardSurface')
         self.assertEqual(nerve.maya.Node.getAttr(mat, 'baseColor'), matdata['diffuse_color'])
         self.assertAlmostEqual(nerve.maya.Node.getAttr(mat, 'base'), matdata['diffuse_weight'])
-
+    
+    @unittest.skip("skip")
     def test_abstractWithTextures(self):
         self.NewScene()
         net = self.CreateLambertNetwork()
@@ -201,6 +206,26 @@ class MayaMaterial(Base):
 
         self.NewScene()
         material.Gather(shader='RedshiftMaterial')
+
+    def test_convert(self):
+        self.NewScene()
+        mat = self.CreateLambert('lambert')
+        nerve.maya.Node.setAttr(mat, 'color', (1,1,0))
+        nerve.maya.Node.setAttr(mat, 'diffuse', 0.72)
+
+        cmds.select(mat, r=True)
+        material = nerve.maya.Material().Convert('RedshiftMaterial')
+
+        self.assertEqual( nerve.maya.Node.getAttr(material[0], 'diffuse_color'), (1,1,0) )
+        self.assertAlmostEqual( nerve.maya.Node.getAttr(material[0], 'diffuse_weight'), 0.72 )
+        
+        self.NewScene()
+        net = self.CreateLambertNetwork()
+
+        cmds.select(net['mat'], r=True)
+        material = nerve.maya.Material().Convert('RedshiftMaterial')
+        
+
 
 def Run():
     testSuite = unittest.TestSuite()

@@ -1281,6 +1281,49 @@ class Material(nerve.Material, Base):
             material = cmds.shadingNode( shader, asShader=True, name=name )
             self.ConvertFromAbstract(material, data['abstract'])
     
+    def Convert(self, shader, remove=True):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            cmds.warning('Nothing selected.')
+
+        materials = []
+        for n in sel:
+            ntype = cmds.nodeType(n)
+            if not cmds.getClassification(n, satisfies='shader'):
+                continue
+            if ntype not in self.GetMaterialTypes():
+                continue
+
+            # History
+            material = Node.create(shader, name=n)
+            
+            ctable = self.GetMaterialConvertTable( ntype, shader )
+            for grp in ctable.keys():
+                for key, val in ctable[grp].items():
+                    if not (val['src'] and val['dest']):
+                        continue
+                    con = cmds.listConnections(n+'.'+val['src'], plugs=True)
+                    if con: # Has Texture
+                        cmds.connectAttr(con[0], material+'.'+val['dest'], f=True)
+                    else:
+                        value = Node.getAttr( n, val['src'] )
+                        Node.setAttr( material, val['dest'], value )
+
+            # Future
+            con = cmds.listConnections(n + '.outColor', plugs=True) or []
+            for c in con:
+                cmds.connectAttr(material + '.outColor', c, f=True)
+
+            if remove:
+                cmds.delete(n)
+                name = cmds.rename(material, n)
+                materials.append( name )
+            else:
+                materials.append(material)
+            
+    
+        return materials
+            
     def mat_lambert(self):
         return {
             'diffuse': {
