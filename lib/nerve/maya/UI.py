@@ -214,6 +214,8 @@ class Menu:
                 parent = self.ctrl['redshift']
                 sep('Shading', parent)
                 itm('Convert Materials to RedsfhitMaterial', parent, nerve.maya.tools.rsConvertMaterial)
+                itm('Convert Opacity To Sprite', parent, nerve.maya.tools.rsConvertOpacityToSprite)
+                itm('Convert Sprite To Opacity', parent, nerve.maya.tools.rsConvertSpriteToOpacity)
                 sep('Proxies', parent)
                 itm('Lock Proxy History', parent, nerve.maya.tools.lockRsProxyHistory)
                 sep('Tesselation', parent)

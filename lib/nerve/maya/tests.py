@@ -10,6 +10,8 @@ import nerve
 reload(nerve)
 import nerve.maya
 reload(nerve.maya)
+import nerve.maya.tools
+reload(nerve.maya.tools)
 
 import maya.cmds as cmds
 
@@ -489,12 +491,29 @@ class MayaMaterial(Base):
         data = material.ConvertToAbstract(mat)
         self.assertFalse(material.AbstractHasDisplacement(data))        
 
+class MayaTools(Base):
+    def test_rsOpacityToSprite(self):
+        self.NewScene()
+        sg = nerve.maya.Node.create('shadingEngine')
+        mat = nerve.maya.Node.create('RedshiftMaterial')
+        tex = nerve.maya.Node.create('file')
 
+        nerve.maya.Node.setAttr(tex, 'fileTextureName', 'opacity.jpg')
+        nerve.maya.Node.connectAttr(tex, 'outColor', mat, 'opacity_color')
+        nerve.maya.Node.connectAttr(mat, 'outColor', sg, 'surfaceShader')
+
+        #cmds.select(mat, r=True)
+        #nerve.maya.tools.rsConvertOpacityToSprite()
+
+       # cmds.select('rsSprite1', r=True)
+        #nerve.maya.tools.rsConvertSpriteToOpacity()
+        
 
 def Run():
     testSuite = unittest.TestSuite()
-    testSuite.addTest( unittest.makeSuite(Maya))
-    testSuite.addTest( unittest.makeSuite(MayaNode))
-    testSuite.addTest( unittest.makeSuite(MayaMaterial) )
+    #testSuite.addTest( unittest.makeSuite(Maya))
+    #testSuite.addTest( unittest.makeSuite(MayaNode))
+    #testSuite.addTest( unittest.makeSuite(MayaMaterial) )
+    testSuite.addTest( unittest.makeSuite(MayaTools) )
     runner = unittest.TextTestRunner(verbosity=2)
     runner.run(testSuite)

@@ -401,6 +401,57 @@ def rsConvertMaterial():
     for mat in materials:
         nerve.maya.Material().Convert('RedshiftMaterial')
         
+def rsConvertOpacityToSprite():
+    materials = nerve.maya.Node.GetMaterials()
+    for mat in materials:
+        if cmds.nodeType(mat) != 'RedshiftMaterial':
+            continue
+
+        attrdata = nerve.maya.Node.GetAttrData(mat, 'opacity_color')
+        if 'node' not in attrdata.keys():
+            continue
+        tex = nerve.maya.Node.listHistory( mat+'.opacity_color', 'file')
+        if not tex:
+            continue
+        
+        sprite = nerve.maya.Node.create('RedshiftSprite')
+        nerve.maya.Node.setAttr(sprite, 'tex0', cmds.getAttr(tex + '.fileTextureName'))
+        nerve.maya.Node.connectAttr(mat, 'outColor', sprite, 'input' )
+
+        sgs = cmds.listConnections(mat + '.outColor', type='shadingEngine')
+        if not sgs:
+            continue
+
+        for sg in sgs:
+            nerve.maya.Node.connectAttr( sprite, 'outColor', sg, 'surfaceShader' )
+
+        cmds.disconnectAttr(tex + '.outColor', mat + '.opacity_color')
+
+def rsConvertSpriteToOpacity():
+    materials = nerve.maya.Node.GetMaterials()
+    for sprite in materials:
+        if cmds.nodeType(sprite) != 'RedshiftSprite':
+            continue
+        mat = nerve.maya.Node.listHistory(sprite + '.input', 'RedshiftMaterial')
+        if not mat:
+            continue
+
+        texfile = cmds.getAttr(sprite + '.tex0')
+        tex = nerve.maya.Node.create('file')
+        nerve.maya.Node.setAttr(tex, 'fileTextureName', texfile)
+        nerve.maya.Node.setAttr(tex, 'colorSpace', 'Raw')
+
+        nerve.maya.Node.connectAttr( tex, 'outColor', mat, 'opacity_color')
+
+        sgs = cmds.listConnections(sprite + '.outColor', type='shadingEngine')
+        if not sgs:
+            continue
+        for sg in sgs:
+            cmds.connectAttr(mat +'.outColor', sg + '.surfaceShader', f=True)
+
+        cmds.delete(sprite)
+
+        
 # Rendering
 def disableSmoothRender():
     sel = cmds.ls(sl=True, l=True)
