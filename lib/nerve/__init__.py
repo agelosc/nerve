@@ -1587,7 +1587,7 @@ class Material(Asset):
             'transparency': (0.0, 0.0, 0.0),
             },
         'bump': {
-            'map': (0.0, 0.0, 0.0),
+            'map': None,
             'height': 0.01,
             'type': 0, # 0: Bump, 1: Tangent Space Normal, 2: Object Space Normal
             },

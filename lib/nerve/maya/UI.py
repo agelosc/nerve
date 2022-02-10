@@ -212,8 +212,8 @@ class Menu:
             self.ctrl['redshift'] = grp('Redshift', parent=self.ctrl['render'])
             if True: # Redshift
                 parent = self.ctrl['redshift']
-                #itm('Release...', parent, nerve.maya.tools.rsRelease)
-                #itm('Gather...', parent, nerve.maya.tools.rsGather)
+                sep('Shading', parent)
+                itm('Convert Materials to RedsfhitMaterial', parent, nerve.maya.tools.rsConvertMaterial)
                 sep('Proxies', parent)
                 itm('Lock Proxy History', parent, nerve.maya.tools.lockRsProxyHistory)
                 sep('Tesselation', parent)

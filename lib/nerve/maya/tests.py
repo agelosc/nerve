@@ -398,7 +398,7 @@ class MayaMaterial(Base):
         material.Gather(shader='RedshiftMaterial')
         #nerve.String.pprint( material.ConvertToAbstract(mat)['bump'] )
     
-    #@unittest.skip('skip')
+    @unittest.skip('skip')
     def test_ConvertBumpMap(self):
         self.NewScene()
         doDisplacement = True
@@ -431,6 +431,14 @@ class MayaMaterial(Base):
         #nerve.String.pprint(data['bump'])
         nerve.maya.Material().Convert('RedshiftMaterial')
     
+    #@unittest.skip('skip')
+    def test_ConvertNoBumpMap(self):
+        self.NewScene()
+        net = self.CreateLambertNetwork()
+
+        #cmds.select(net['mat'], r=True)
+        #nerve.maya.Material().Convert('RedshiftMaterial')
+
     @unittest.skip('skip')
     def test_HasDisplacement(self):
         self.NewScene()
@@ -480,7 +488,6 @@ class MayaMaterial(Base):
         material = nerve.maya.Material('test', version=1)
         data = material.ConvertToAbstract(mat)
         self.assertFalse(material.AbstractHasDisplacement(data))        
-
 
 
 

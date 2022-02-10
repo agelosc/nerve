@@ -872,7 +872,7 @@ class Node:
             if sgs:
                 return list(set(sgs))
             
-        return None
+        return []
         
     @staticmethod
     def GetMaterials(sel=None):
@@ -1245,16 +1245,19 @@ class Material(nerve.Material, Base):
 
                         utable = self.GetUtilityTable( cdata['type'] )
                         for ukey, uattr in utable[grp].items():
-                            self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
+                            if self.HasDisplacement(data):
+                                self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
                     else:
                         cdata = attr[0]
-                        if 'node' not in data[grp].keys():
+                        if 'node' not in data[grp].keys() and self.HasBump(data):
                             data[grp]['node'] = Node.create( cdata['type'] )
                         utable = self.GetUtilityTable( cdata['type'] )
                         for ukey, uattr in utable[grp].items():
-                            self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
+                            if self.HasBump(data):
+                                self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
                         if all(x in cdata for x in ['attr', 'plug']):
-                            Node.connectAttr(data[grp]['node'], cdata['plug'], material, cdata['attr'])
+                            if self.HasBump(data):
+                                Node.connectAttr(data[grp]['node'], cdata['plug'], material, cdata['attr'])
                 else:
                     self.SetAbstractData(material, attr, data[grp][key])
 
@@ -1395,7 +1398,13 @@ class Material(nerve.Material, Base):
                     if data['displacement']['map']['texture']:
                         return True
         return False
-    
+    def HasBump(self, data):
+        if 'bump' in data.keys():
+            if 'map' in data['bump'].keys():
+                if isinstance(data['bump']['map'], dict):
+                    if data['bump']['map']['texture']:
+                        return True
+        return False    
     def GetDisplacement(self, data):
         return data['displacement']['map']['node']
 

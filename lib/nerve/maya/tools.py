@@ -396,6 +396,11 @@ def disableRsDisplacement():
 
     cmds.select(sel, r=True)
 
+def rsConvertMaterial():
+    materials = nerve.maya.Node.GetMaterials()
+    for mat in materials:
+        nerve.maya.Material().Convert('RedshiftMaterial')
+        
 # Rendering
 def disableSmoothRender():
     sel = cmds.ls(sl=True, l=True)
