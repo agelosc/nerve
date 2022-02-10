@@ -853,21 +853,27 @@ class Node:
 
     @staticmethod
     def GetShadingEngines(obj, hierarchy=True):
-        if 'dagNode' not in cmds.nodeType(obj, inherited=True):
-            return []
-        
-        objects = [obj]
-        if hierarchy:
-            objects += cmds.listRelatives(obj, allDescendents=True, fullPath=True, type='mesh') or []
+        if 'dagNode' in cmds.nodeType(obj, inherited=True):
+            objects = [obj]
+            if hierarchy:
+                objects += cmds.listRelatives(obj, allDescendents=True, fullPath=True, type='mesh') or []
 
-        shadingEngines = []
-        for n in objects:
-            if cmds.nodeType(n) != 'mesh':
-                continue
-            shadingEngines+= cmds.listConnections(n, destination=True, source=False, plugs=False, type='shadingEngine') or []
+            shadingEngines = []
+            for n in objects:
+                if cmds.nodeType(n) != 'mesh':
+                    continue
+                shadingEngines+= cmds.listConnections(n, destination=True, source=False, plugs=False, type='shadingEngine') or []
+            
+            return list(set(shadingEngines))
         
-        return list(set(shadingEngines))
-
+        if cmds.getClassification(cmds.nodeType(obj), satisfies='shader'):
+            
+            sgs = cmds.listConnections(obj + '.outColor', type='shadingEngine') 
+            if sgs:
+                return list(set(sgs))
+            
+        return None
+        
     @staticmethod
     def GetMaterials(sel=None):
         if sel is None:
@@ -945,30 +951,53 @@ class Node:
 
     @staticmethod
     def setAttr(node, attr, value):
+        #print(node, attr)
         plug = node + '.' + attr
-        atype = cmds.getAttr(plug, type=True)
+        attrdata = Node.GetAttrData(node, attr)
         
-        if atype == 'string':
+        if attrdata['type'] == 'string':
             cmds.setAttr(plug, value, type='string')
             return True
         
-        if atype == 'float3':
+        if attrdata['type'] == 'vector':
             if isinstance(value, (list, tuple)):
                 cmds.setAttr(plug, value[0], value[1], value[2], type='double3')
             else:
                 cmds.setAttr(plug, value, value, value, type='double3')
             return True
         
-        if atype == 'float2':
-            cmds.setAttr(plug, value[0][0], value[0][1])
+        if attrdata['type'] == 'vector2':
+            cmds.setAttr(plug, value[0], value[1])
             return True
 
+        if attrdata['type'] == 'float':
+            val = value
+            if isinstance(value, (list, tuple)):
+                val = value[0]
+
+            if 'min' in attrdata.keys() and val < attrdata['min']:
+                cmds.warning('Cannot set '+node+'.'+attr+' below its minimum value of '+str(attrdata['min']))
+                return True
+            if 'max' in attrdata.keys() and val > attrdata['max']:
+                cmds.warning('Cannot set '+node+'.'+attr+' above its maximum value of '+str(attrdata['max']))
+                return True
+
+            cmds.setAttr(plug, val)
+            return True
 
         cmds.setAttr(plug, value)
 
     @staticmethod
     def getAttr(node, attr):
         return Node.GetAttrData(node, attr)['value']
+
+    @staticmethod
+    def attrExists(node, attr):
+        return cmds.attributeQuery(attr, n=node, exists=True)
+    
+    @staticmethod
+    def connectAttr(outnode, outplug, innode, inplug):
+        return cmds.connectAttr(outnode+'.'+outplug, innode+'.'+inplug, f=True)
 
     @staticmethod
     def listAttr(node):
@@ -1008,6 +1037,10 @@ class Node:
             data['value'] = cmds.getAttr(plug)
             data['default'] = cmds.attributeQuery(attr, n=node, listDefault=True)[0]
             data['type'] = 'float'
+            if cmds.attributeQuery(attr, n=node, minExists=True):
+                data['min'] = cmds.attributeQuery(attr, n=node, min=True)[0]
+            if cmds.attributeQuery(attr, n=node, maxExists=True):
+                data['max'] = cmds.attributeQuery(attr, n=node, max=True)[0]
             return data
 
         if atype == 'float2':
@@ -1032,12 +1065,17 @@ class Node:
             data['value'] = cmds.getAttr(plug)
             data['default'] = int(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
             data['type'] = 'int'
+            if cmds.attributeQuery(attr, n=node, minExists=True):
+                data['min'] = cmds.attributeQuery(attr, n=node, min=True)[0]
+            if cmds.attributeQuery(attr, n=node, maxExists=True):
+                data['max'] = cmds.attributeQuery(attr, n=node, max=True)[0]            
             return data
 
         if atype == 'enum':
             data['options'] = cmds.attributeQuery(attr, n=node, listEnum=True)[0].split(':')
             data['value'] = cmds.getAttr(plug)
             data['default'] = int(cmds.attributeQuery(attr, n=node, listDefault=True)[0])
+            data['type'] = 'enum'
             return data
 
         if atype == 'string':
@@ -1047,6 +1085,44 @@ class Node:
             return data
         
         raise Exception('attribute type not defined:'+ atype)
+
+    @staticmethod
+    def GetRandomValue(node, attr):
+        def setRange(value, oldmin, oldmax, min, max):
+            ''' OutValue = Min + (((Value-OldMin)/(OldMax-OldMin)) * (Max-Min))'''
+            return min + (((value-oldmin)/(oldmax-oldmin)) * (max-min))
+
+        def decimal(value, places=1000):
+            return int(value*places)/float(places)
+
+        def rand():
+            return decimal(random.random())
+
+        import random
+
+        attrdata = Node.GetAttrData(node, attr)
+        if attrdata['type'] == 'float':
+            min = attrdata['min'] if 'min' in attrdata.keys() else 0
+            max = attrdata['max'] if 'max' in attrdata.keys() else 1
+            rand = setRange(rand(), 0, 1, min, max)
+            return rand
+
+        if attrdata['type'] == 'bool':
+            return not cmds.getAttr(node+'.'+attr)
+        if attrdata['type'] == 'vector':
+            return (rand(), rand(), rand())
+        if attrdata['type'] == 'vector2':
+            return (rand(), rand())
+        if attrdata['type'] == 'int':
+            min = attrdata['min'] if 'min' in attrdata.keys() else 1
+            max = attrdata['max'] if 'max' in attrdata.keys() else 10
+            return setRange( int(random.random() * 1000, 0, 1, min, max ) )
+        if attrdata['type'] == 'enum':
+            return int( random.random() * len(attrdata['options']))
+        if attrdata['type'] == 'string':
+            return str( random.random() )
+        
+        return random.random()
 
     def Serialize(self, history=None):
         self.data['name'] = Node.CleanName(self.node)
@@ -1101,9 +1177,11 @@ class Node:
                     Node( node ).Unserialize( history[node], history, False )
                     cmds.connectAttr( nodens + '.' + adata['plug'], data['name']+'.'+attr, f=True )
 
+        cmds.select(data['name'], r=True)
         cmds.namespace(setNamespace=':')
         if clearNamespace:
             cmds.namespace(removeNamespace=ns, mergeNamespaceWithRoot=True, f=True)
+        return cmds.ls(sl=True)[0]
 
     @staticmethod
     def create(ntype, name=None):
@@ -1116,6 +1194,9 @@ class Node:
             uv = cmds.shadingNode('place2dTexture', asUtility=True)
             Node.uvtexture(uv, tex)
             return tex
+        if ntype == 'shadingGroup':
+            sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, **args)
+            return sg
 
         if cmds.getClassification(ntype, satisfies='shader'):
             return cmds.shadingNode(ntype, asShader=True, **args)
@@ -1134,23 +1215,74 @@ class Material(nerve.Material, Base):
         self.AddReleaseMethod('Export')
         self.AddGatherMethod('Import')
 
+    def SetAbstractData(self, node, attr, data):
+        if isinstance(data, dict): # Has Texture
+            #Node.setAttr( node, attr, data['value'])
+            tex = self.SetTextureData( data['texture'] )
+            atype = cmds.getAttr(node+'.'+attr, type=True)
+            if atype == 'float3':
+                cmds.connectAttr( tex + '.outColor', node+'.'+attr, f=True)
+            if atype == 'float':
+                cmds.connectAttr( tex + '.outAlpha', node+'.'+attr, f=True)
+        else: # Does not have texture
+            val = data
+            if val is None:
+                return False
+            Node.setAttr( node, attr, val )
+
     def ConvertFromAbstract(self, material, data):
         mattype = cmds.nodeType(material)
 
         table = self.GetMaterialTable( mattype )
         for grp in table.keys(): # grp: diffuse, reflection, refraction etc
             for key, attr in table[grp].items(): # key: abstract attr name, attr: concrete attr name
-                if isinstance(data[grp][key], dict): # Has Texture
-                    Node.setAttr( material, attr, data[grp][key]['value'])
-                    tex = self.SetTextureData( data[grp][key]['texture'] )
-                    atype = cmds.getAttr(material+'.'+attr, type=True)
-                    if atype == 'float3':
-                        cmds.connectAttr( tex + '.outColor', material+'.'+attr, f=True)
-                    if atype == 'float':
-                        cmds.connectAttr( tex + '.outAlpha', material+'.'+attr, f=True)
-                else: # Does not have texture
-                    val = data[grp][key]
-                    Node.setAttr( material, attr, val )
+                if isinstance(attr, list): # Has Search Node
+                    if grp == 'displacement':
+                        cdata = attr[0]
+                        if 'node' not in data[grp].keys() and self.HasDisplacement(data):
+                            data[grp]['node'] = Node.create( cdata['type'] )
+                            data[grp]['plug'] = cdata['plug']
+
+                        utable = self.GetUtilityTable( cdata['type'] )
+                        for ukey, uattr in utable[grp].items():
+                            self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
+                    else:
+                        cdata = attr[0]
+                        if 'node' not in data[grp].keys():
+                            data[grp]['node'] = Node.create( cdata['type'] )
+                        utable = self.GetUtilityTable( cdata['type'] )
+                        for ukey, uattr in utable[grp].items():
+                            self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
+                        if all(x in cdata for x in ['attr', 'plug']):
+                            Node.connectAttr(data[grp]['node'], cdata['plug'], material, cdata['attr'])
+                else:
+                    self.SetAbstractData(material, attr, data[grp][key])
+
+    def ConvertFromAbstractOLD(self, material, data):
+        mattype = cmds.nodeType(material)
+
+        table = self.GetMaterialTable( mattype )
+        for grp in table.keys(): # grp: diffuse, reflection, refraction etc
+            for key, attr in table[grp].items(): # key: abstract attr name, attr: concrete attr name
+                if isinstance(table[grp][key], list): # Has Search Node
+                    cdata = table[grp][key][0] # Select first choice
+                    if grp == 'displacement' and not data[grp][key]:
+                        continue
+
+                    util = Node.create(cdata['type'])
+                    if 'attr' in cdata.keys() and 'plug' in cdata.keys():
+                        sg = cmds.listConnections(material, type='shadingEngine')
+                        if grp == 'displacement':
+                            if sg:
+                                Node.connectAttr(util, cdata['plug'], sg[0], cdata['attr'])
+                        else:
+                            Node.connectAttr(util, cdata['plug'], material, cdata['attr'])
+
+                    utable = self.GetUtilityTable(cdata['type'])
+                    self.SetAbstractData(util, utable[grp][key], data[grp][key])
+                    continue
+
+                self.SetAbstractData(material, attr, data[grp][key])
 
     def GetTextureColorCorrectData(self, node, cc):
         ntype = cmds.nodeType(node)
@@ -1221,6 +1353,52 @@ class Material(nerve.Material, Base):
 
         return self.GetTextureData(nextCon, nextAttr, data)
 
+    def GetAbstractData(self, node, table, data={}):
+        for grp in table.keys(): # grp: diffuse, reflection, bump etc...
+            if grp not in data.keys():
+                data[grp] = {}
+
+            for abst, conc in table[grp].items(): # abstract/concrete attribute names
+                if isinstance(conc, list): # if concrete attr is list search for nodes
+                    for cdata in conc: # for each attribute in list
+                        searchnode = node # store search node
+                        if grp == 'displacement': # for displacement, search node is ShadingEngine
+                            con = cmds.listConnections(node, type='shadingEngine')
+                            if not con: # shading engine not found
+                                continue
+                            searchnode = con[0]
+                        if 'attr' in cdata.keys(): # search node.attribute
+                            searchnode+='.'+cdata['attr']
+
+                        if cdata['type'] not in self.GetUtilityTypes():
+                            continue
+                        history = Node.listHistory(searchnode, cdata['type']) # Get search node history for node
+                        if not history:
+                            continue
+
+                        ctable = self.GetUtilityTable(cdata['type']) # get utility node table
+                        self.GetAbstractData( history, ctable, data ) # set data from utility node
+
+                else: # concrete attribute should exist on node
+                    attrdata = Node.GetAttrData(node, conc)
+                    data[grp][abst] = attrdata['value']
+                    if 'node' in attrdata.keys():
+                        data[grp][abst] = {}
+                        data[grp][abst]['value'] = attrdata['value']
+                        data[grp][abst]['texture'] = self.GetTextureData( node, conc )
+        return data
+    
+    def HasDisplacement(self, data):
+        if 'displacement' in data.keys():
+            if 'map' in data['displacement'].keys():
+                if isinstance(data['displacement']['map'], dict):
+                    if data['displacement']['map']['texture']:
+                        return True
+        return False
+    
+    def GetDisplacement(self, data):
+        return data['displacement']['map']['node']
+
     def ConvertToAbstract(self, material):
         mattype = cmds.nodeType(material)
         if mattype not in self.GetMaterialTypes():
@@ -1228,14 +1406,8 @@ class Material(nerve.Material, Base):
         
         data = self.abstract()
         table = self.GetMaterialTable( mattype ) # Convertion data
-        for grp in table.keys(): # grp: diffuse, reflection, refraction ... etc
-            for key, attr in table[grp].items(): # key: abstract attr name, attr: concrete attr name
-                attrdata = Node.GetAttrData(material, attr)
-                data[grp][key] = attrdata['value']
-                if 'node' in attrdata.keys():
-                    data[grp][key] = {}
-                    data[grp][key]['value'] = attrdata['value']
-                    data[grp][key]['texture'] = self.GetTextureData( material, attr )
+        self.GetAbstractData( material, table, data)
+
         return data
 
     def Export(self, concrete=True, abstract=True):
@@ -1250,6 +1422,8 @@ class Material(nerve.Material, Base):
             data[material] = {}
             data[material]['name'] = Node.CleanName(material)
             data[material]['type'] = cmds.nodeType(material)
+            data[material]['sets'] = self.GetShadingEngines(material)
+            data[material]['app'] = 'maya'
             # Concrete
             if concrete:
                 data[material]['concrete'] = Node(material).Serialize()
@@ -1270,18 +1444,44 @@ class Material(nerve.Material, Base):
         with open( datafile.AsString(), 'r') as infile:
             indata = json.load( infile )
 
-        #print('')
-        #nerve.String.pprint(indata)
-
+        materials = []
         for name, data in indata.items(): # material, material data
             if 'concrete' in data.keys() and data['concrete']['type'] == shader:
-                Node(name).Unserialize(data['concrete'])
+                material = Node(name).Unserialize(data['concrete'])
+                materials.append(material)
                 continue
             
-            material = cmds.shadingNode( shader, asShader=True, name=name )
+            material = Node.create(shader, name=name)
+            materials.append(material)
             self.ConvertFromAbstract(material, data['abstract'])
+        return materials
     
     def Convert(self, shader, remove=True):
+        sel = cmds.ls(sl=True, l=True)
+        if not len(sel):
+            cmds.warning('Nothing Selected.')
+            return False
+        
+        materials = Node.GetMaterials( sel )
+        for material in materials:
+            mattype = cmds.nodeType(material)
+            if mattype not in self.GetMaterialTypes():
+                continue
+            if shader == mattype:
+                continue
+
+            sgs = Node.GetShadingEngines(material)
+            data = self.ConvertToAbstract(material)
+
+            mat = Node.create(shader, name=material+'_'+shader)
+            self.ConvertFromAbstract(mat, data)
+
+            for sg in sgs:
+                cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
+                if self.HasDisplacement(data):
+                   Node.connectAttr(data['displacement']['node'], data['displacement']['plug'], sg, 'displacementShader')
+
+    def ConvertOLD(self, shader, remove=True):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
             cmds.warning('Nothing selected.')
@@ -1289,19 +1489,27 @@ class Material(nerve.Material, Base):
         materials = []
         for n in sel:
             ntype = cmds.nodeType(n)
-            if not cmds.getClassification(n, satisfies='shader'):
+            if not cmds.getClassification(ntype, satisfies='shader'):
                 continue
             if ntype not in self.GetMaterialTypes():
                 continue
-
-            # History
-            material = Node.create(shader, name=n)
+            if shader == ntype:
+                continue
             
+            # New material
+            material = Node.create(shader, name=n)
+
             ctable = self.GetMaterialConvertTable( ntype, shader )
             for grp in ctable.keys():
                 for key, val in ctable[grp].items():
                     if not (val['src'] and val['dest']):
                         continue
+                    if isinstance(val['src'], list): # Utility Node
+                        cdata = val['src']
+                        util = Node.create(cdata['type'])
+                    else:
+                        pass
+
                     con = cmds.listConnections(n+'.'+val['src'], plugs=True)
                     if con: # Has Texture
                         cmds.connectAttr(con[0], material+'.'+val['dest'], f=True)
@@ -1323,36 +1531,300 @@ class Material(nerve.Material, Base):
             
     
         return materials
-            
-    def mat_lambert(self):
-        return {
-            'diffuse': {
-                'color':'color',
-                'weight':'diffuse'
-            }
-        }
 
     def mat_RedshiftMaterial(self):
        return {
             'diffuse': {
                 'color':'diffuse_color',
-                'weight':'diffuse_weight'
-            }
+                'weight':'diffuse_weight',
+                'roughness':'diffuse_roughness'
+                },
+            'translucency':{
+                'color':'transl_color',
+                'weight':'transl_weight',
+                },    
+            'reflection': {
+                'color': 'refl_color',
+                'weight': 'refl_weight',
+                'roughness':'refl_roughness',
+                'anisotropy': 'refl_aniso',
+                'rotation': 'refl_aniso_rotation',
+                'metalness': 'refl_metalness',
+                'reflectivity': 'refl_reflectivity',
+                'ior': 'refl_ior',
+                },
+            'refraction': {
+                'color': 'refr_color',
+                'weight': 'refr_weight',
+                'roughness': 'refr_roughness',
+                'ior': 'refr_ior',
+                'dispersion': 'refr_abbe',
+                'thinWalled': 'refr_thin_walled',
+                'transmittance': 'refr_transmittance',
+                'absorption': 'refr_absorption_scale',
+                },
+            'sheen': {
+                'color': 'sheen_color',
+                'weight': 'sheen_weight',
+                'roughness': 'sheen_roughness',
+                },   
+            'coat': {
+                'color': 'coat_color',
+                'weight': 'coat_weight',
+                'roughness': 'coat_roughness',
+                'ior': 'coat_ior',
+                },
+            'sss': {
+                'weight': 'ms_amount',
+                'radius': 'ms_radius_scale',
+                'colorSingle': 'ss_scatter_coeff',
+                'weightSingle': 'ss_amount',
+                'phaseSingle': 'ss_phase',
+                'colorShallow': 'ms_color0',
+                'weightShallow': 'ms_weight0',
+                'radiusShallow': 'ms_radius0',
+                'colorMid': 'ms_color1',
+                'weightMid': 'ms_weight1',
+                'radiusMid': 'ms_radius1',
+                'colorDeep': 'ms_color2',
+                'weightDeep': 'ms_weight2',
+                'radiusDeep': 'ms_radius2',
+                },   
+            'emission': {
+                'color': 'emission_color',
+                'weight': 'emission_weight',
+                },
+            'opacity': {
+                'color': 'opacity_color',
+                },
+            'bump': {
+                'map': [{'type':'RedshiftBumpMap', 'plug':'out', 'attr':'bump_input'}],
+                #'height': [{'type':'RedshiftBumpMap'}],
+                },
+            'displacement': {
+                    'map': [{'type':'RedshiftDisplacement', 'plug':'out', 'attr':'displacementShader'}],
+                    #'scale': [{'type':'bump2d', 'attr':'normalCamera'}],
+                },                
         }
-
-    def mat_usdPreviewSurface(self):
-        return {
-            'diffuse': {
-                'color': 'diffuseColor'
-            }
-
-        }
-
+    def mat_aiStandardSurface(self):
+        return self.mat_standardSurface()
     def mat_standardSurface(self):
         return {
             'diffuse': {
                 'color': 'baseColor',
-                'weight': 'base'
+                'weight': 'base',
+                'roughness': 'diffuseRoughness'
+            },
+            'reflection': {
+                'color': 'specularColor',
+                'weight': 'specular',
+                'roughness':'specularRoughness',
+                'anisotropy': 'specularAnisotropy',
+                'rotation': 'specularRotation',
+                'metalness': 'metalness',
+                'ior': 'specularIOR',
+                },
+            'refraction': {
+                'weight': 'transmission',
+                'roughness': 'transmissionExtraRoughness',
+                'dispersion': 'transmissionDispersion',
+                'thinWalled': 'thinWalled',
+                'transmittance': 'transmissionColor',
+                'absorption': 'transmissionDepth',
+                },
+            'sheen': {
+                'color': 'sheenColor',
+                'weight': 'sheen',
+                'roughness': 'sheenRoughness',
+                },   
+            'coat': {
+                'color': 'coatColor',
+                'weight': 'coat',
+                'roughness': 'coatRoughness',
+                'ior': 'coatIOR',
+                },         
+            'sss': {
+                'weight': 'subsurface',
+                'radius': 'subsurfaceScale',
+                'colorShallow': 'subsurfaceColor',
+            },
+            'emission': {
+                'color': 'emissionColor',
+                'weight': 'emission',
+                },
+          'opacity': {
+                'color': 'opacity',
+                },
+            'bump': {
+                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                },
+            'displacement': {
+                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                },                                                                                      
+        }
+    def mat_usdPreviewSurface(self):
+        return {
+            'diffuse': {
+                'color': 'diffuseColor'
+            },
+            'reflection': {
+                'color': 'specularColor',
+                'roughness':'roughness',
+                'metalness': 'metallic',
+                'ior': 'ior',
+                },
+            'coat': {
+                'weight': 'clearcoat',
+                'roughness': 'clearcoatRoughness',
+                },     
+            'emission': {
+                'color': 'emissiveColor',
+                },
+            'opacity': {
+                'color': 'opacity',
+                },                                              
+        }
+    def mat_lambert(self):
+        return {
+            'diffuse': {
+                'color':'color',
+                'weight':'diffuse'
+                },
+            'emission': {
+                'color': 'incandescence',
+                }, 
+            'opacity': {
+                'color': 'transparency',
+                },  
+            'bump': {
+                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                },
+            'displacement': {
+                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                },
+        }
+    def mat_blinn(self):
+        return {
+            'diffuse': {
+                'color':'color',
+                'weight': 'diffuse',
+            },
+            'translucency':{
+                'weight':'translucence',
+            },
+            'reflection': {
+                'color': 'specularColor',
+                'metalness': 'reflectivity',
+                'roughness':'eccentricity',
+                'reflectivity': 'reflectedColor',
+                },  
+            'emission': {
+                'color': 'incandescence',
+                },
+            'opacity': {
+                'color': 'transparency',
+                },
+            'bump': {
+                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                },
+            'displacement': {
+                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                },                                                               
+        }
+    def mat_phong(self):
+        return {
+            'diffuse': {
+                'color':'color',
+                'weight':'diffuse'
+            },
+            'translucency':{
+                'weight':'translucence',
+            },
+            'reflection': {
+                'color': 'specularColor',
+                'metalness': 'reflectivity',
+                'reflectivity': 'reflectedColor',
+                },
+            'emission': {
+                'color': 'incandescence',
+                },
+            'opacity': {
+                'color': 'transparency',
+                },
+            'bump': {
+                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                },
+            'displacement': {
+                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                },                                                                  
+        }
+    def mat_phongE(self):
+        return {
+            'diffuse': {
+                'color':'color',
+                'weight':'diffuse'
+            },
+            'translucency':{
+                'weight':'translucence',
+            },   
+            'reflection': {
+                'color': 'specularColor',
+                'roughness':'roughness',
+                'metalness': 'reflectivity',
+                'reflectivity': 'reflectedColor',
+                },
+            'emission': {
+                'color': 'incandescence',
+                },
+            'opacity': {
+                'color': 'transparency',
+                },
+            'bump': {
+                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                },
+            'displacement': {
+                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                },                                                      
+        }
+    def mat_surfaceShader(self):
+        return {
+            'diffuse': {
+                'color':'outColor'
+            },
+            'opacity': {
+                'color': 'outTransparency',
+                },              
+        }
+
+    def util_bump2d(self):
+        return {
+            'bump': {
+                'map': 'bumpValue',
+                'height': 'bumpDepth',
+                'type': 'bumpInterp',
+            },
+        }
+    def util_displacementShader(self):
+        return {
+            'displacement': {
+                'map': 'vectorDisplacement',
+                'scale': 'scale',
+            }
+        }
+    def util_RedshiftBumpMap(self):
+        return {
+            'bump': {
+                'map': 'input',
+                'height': 'scale',
+                'type': 'inputType',
             }
 
         }
+    def util_RedshiftDisplacement(self):
+        return {
+            'displacement': {
+                'map': 'texMap',
+                'scale': 'scale',
+            }
+
+        }        

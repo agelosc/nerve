@@ -17,23 +17,28 @@ class Base(unittest.TestCase):
     def NewScene(self):
         cmds.file(new=True, f=True)
     
-    def CreateLambertNetwork(self):
+    def CreateLambertNetwork(self, shadingEngine=False):
         mat = cmds.shadingNode('lambert', asShader=True, name='lambert')
         tex = nerve.maya.Node.create('file', 'colorTex')
         cc = cmds.shadingNode('colorCorrect', asUtility=True)
         alpha = nerve.maya.Node.create('file', 'alphaTex')
         setRange = cmds.shadingNode('setRange', asUtility=True)
         reverse = cmds.shadingNode('reverse', asUtility=True)
-        sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name='lambert_SG')
+
+        result = {'mat':mat, 'tex':tex, 'cc':cc, 'alpha':alpha, 'setRange':setRange, 'reverse':reverse}
+
+        if shadingEngine:
+            sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name='lambert_SG')
+            cmds.connectAttr(mat + '.outColor', sg+'.surfaceShader', f=True)
+            result['sg'] = sg
 
         cmds.connectAttr(tex + '.outColor', cc + '.inColor', f=True)
         cmds.connectAttr(cc + '.outColor', mat + '.color', f=True)
         cmds.connectAttr(alpha + '.outColor', setRange + '.value', f=True)
         cmds.connectAttr(setRange + '.outValue', reverse + '.input', f=True)
         cmds.connectAttr(reverse + '.outputX', mat + '.diffuse', f=True)
-        cmds.connectAttr(mat + '.outColor', sg+'.surfaceShader', f=True)
 
-        result = {'mat':mat, 'tex':tex, 'cc':cc, 'alpha':alpha, 'setRange':setRange, 'reverse':reverse, 'sg':sg}
+        
 
         return result
 
@@ -206,25 +211,277 @@ class MayaMaterial(Base):
 
         self.NewScene()
         material.Gather(shader='RedshiftMaterial')
-
+    
+    @unittest.skip("skip")
     def test_convert(self):
+        # Simple Lambert
         self.NewScene()
         mat = self.CreateLambert('lambert')
         nerve.maya.Node.setAttr(mat, 'color', (1,1,0))
         nerve.maya.Node.setAttr(mat, 'diffuse', 0.72)
 
         cmds.select(mat, r=True)
-        material = nerve.maya.Material().Convert('RedshiftMaterial')
+        material = nerve.maya.Material().Convert('RedshiftMaterial')[0]
 
-        self.assertEqual( nerve.maya.Node.getAttr(material[0], 'diffuse_color'), (1,1,0) )
-        self.assertAlmostEqual( nerve.maya.Node.getAttr(material[0], 'diffuse_weight'), 0.72 )
+        self.assertEqual( nerve.maya.Node.getAttr(material, 'diffuse_color'), (1,1,0) )
+        self.assertAlmostEqual( nerve.maya.Node.getAttr(material, 'diffuse_weight'), 0.72 )
         
+        # Lambert With Textures
         self.NewScene()
         net = self.CreateLambertNetwork()
 
         cmds.select(net['mat'], r=True)
-        material = nerve.maya.Material().Convert('RedshiftMaterial')
-        
+        material = nerve.maya.Material().Convert('RedshiftMaterial')[0]
+        self.assertTrue( cmds.isConnected(net['cc']+'.outColor', material+'.diffuse_color') )
+        self.assertTrue( cmds.isConnected(net['reverse']+'.outputX', material+'.diffuse_weight') )
+
+    @unittest.skip("skip")
+    def test_allConcrete(self):
+        self.NewScene()
+        material = nerve.maya.Material('material', version=1)
+        mattypes = material.GetMaterialTypes()
+        for mattype in mattypes:
+            #self.NewScene()
+            mat = nerve.maya.Node.create(mattype)
+            table = material.GetMaterialTable( mattype )
+            data = {}
+            for grp in table.keys():
+                data[grp] = {}
+                for key, attr in table[grp].items():
+                    rand = nerve.maya.Node.GetRandomValue( mat, attr )
+                    data[grp][attr] = rand
+                    nerve.maya.Node.setAttr( mat, attr, rand )
+            
+            cmds.select(mat, r=True)
+            material.Release(abstract=False)
+
+            self.NewScene()
+            newmat = material.Gather(shader=mattype)[0]
+            for grp in data.keys():
+                for attr, val in data[grp].items():
+                    attrdata = nerve.maya.Node.GetAttrData(newmat, attr)
+                    if attrdata['type'] == 'float':
+                        self.assertAlmostEqual( nerve.maya.Node.getAttr(newmat, attr), val, 2 )
+                    elif attrdata['type'] == 'vector':
+                        for i in range(3):
+                            self.assertAlmostEqual( nerve.maya.Node.getAttr(newmat, attr)[i], val[i], 2  )
+                    else:
+                        self.assertEqual( nerve.maya.Node.getAttr(newmat, attr), val  )
+    
+    @unittest.skip("skip")
+    def test_allAbstract(self):
+        self.NewScene()
+        material = nerve.maya.Material('material', version=1)
+        mattypes = material.GetMaterialTypes()
+        for mattype in mattypes:
+            #self.NewScene()
+            mat = nerve.maya.Node.create(mattype)
+            table = material.GetMaterialTable( mattype )
+            data = {}
+            for grp in table.keys():
+                data[grp] = {}
+                for key, attr in table[grp].items():
+                    rand = nerve.maya.Node.GetRandomValue( mat, attr )
+                    data[grp][attr] = rand
+                    nerve.maya.Node.setAttr( mat, attr, rand )
+            
+            cmds.select(mat, r=True)
+            material.Release(concrete=False)
+            
+            for imattype in mattypes:
+                self.NewScene()
+                newmat = material.Gather(shader=imattype)[0]
+                print('Gathering {} as abstract {}...'.format(mattype, imattype))
+
+                ctable = material.GetMaterialConvertTable( mattype, imattype)
+                for grp in ctable.keys():
+                    for key, val in ctable[grp].items():
+                        if not (val['src'] and val['dest']):
+                            continue
+                        expectedVal = data[grp][ val['src'] ]
+                        currentVal = nerve.maya.Node.getAttr( newmat, val['dest'] )
+                        # Skip type mistmatch
+                        if type(expectedVal) != type(currentVal):
+                            continue
+
+                        attrdata = nerve.maya.Node.GetAttrData(newmat, val['dest'])
+
+                        if attrdata['type'] == 'float':
+                            # skip tests that exceed range
+                            if 'min' in attrdata.keys() and expectedVal < attrdata['min']:
+                                continue
+                            if 'max' in attrdata.keys() and expectedVal > attrdata['max']:
+                                continue              
+                            self.assertAlmostEqual( expectedVal, currentVal, 2 )
+                        elif attrdata['type'] == 'vector':
+                            for i in range(3):
+                                self.assertAlmostEqual( expectedVal[i], currentVal[i], 2  )
+                        else:
+                            self.assertEqual( expectedVal, currentVal  )            
+
+    @unittest.skip('skip')
+    def test_allConvert(self):
+        self.NewScene()
+        material = nerve.maya.Material('material', version=1)
+        mattypes = material.GetMaterialTypes()
+        for mattype in mattypes:
+            for imattype in mattypes:
+                if imattype == mattype:
+                    continue
+                self.NewScene()
+                mat = nerve.maya.Node.create(mattype)
+                table = material.GetMaterialTable( mattype )
+
+                data = {}
+                for grp in table.keys():
+                    data[grp] = {}
+                    for key, attr in table[grp].items():
+                        rand = nerve.maya.Node.GetRandomValue( mat, attr )
+                        data[grp][attr] = rand
+                        nerve.maya.Node.setAttr( mat, attr, rand )
+
+                print('Converting {} to {}'.format(mattype, imattype))
+                cmds.select(mat, r=True)
+                newmat = material.Convert(imattype)[0]
+
+                ctable = material.GetMaterialConvertTable( mattype, imattype)
+                for grp in ctable.keys():
+                    for key, val in ctable[grp].items():
+                        if not (val['src'] and val['dest']):
+                            continue
+                        expectedVal = data[grp][ val['src'] ]
+                        currentVal = nerve.maya.Node.getAttr( newmat, val['dest'] )
+                        # Skip type mistmatch
+                        if type(expectedVal) != type(currentVal):
+                            continue
+
+                        attrdata = nerve.maya.Node.GetAttrData(newmat, val['dest'])
+
+                        if attrdata['type'] == 'float':
+                            # skip tests that exceed range
+                            if 'min' in attrdata.keys() and expectedVal < attrdata['min']:
+                                continue
+                            if 'max' in attrdata.keys() and expectedVal > attrdata['max']:
+                                continue              
+                            self.assertAlmostEqual( expectedVal, currentVal, 2 )
+                        elif attrdata['type'] == 'vector':
+                            for i in range(3):
+                                self.assertAlmostEqual( expectedVal[i], currentVal[i], 2  )
+                        else:
+                            self.assertEqual( expectedVal, currentVal  ) 
+
+    @unittest.skip('skip')
+    def test_AbstractBumpMap(self):
+        self.NewScene()
+        mat = nerve.maya.Node.create('lambert')
+        sg = nerve.maya.Node.create('shadingGroup')
+        bump = nerve.maya.Node.create('bump2d')
+        tex = nerve.maya.Node.create('file')
+        disp = nerve.maya.Node.create('displacementShader')
+        dtex = nerve.maya.Node.create('file')
+
+        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
+        cmds.setAttr(bump+'.bumpDepth', 0.033)
+        cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
+        cmds.setAttr(disp + '.scale', 0.5)
+
+        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
+        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
+        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
+        cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
+        cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
+
+        cmds.select(mat, r=True)
+        material = nerve.maya.Material('bump', version=1)
+        material.Release(concrete=False)
+        self.NewScene()
+        material.Gather(shader='RedshiftMaterial')
+        #nerve.String.pprint( material.ConvertToAbstract(mat)['bump'] )
+    
+    #@unittest.skip('skip')
+    def test_ConvertBumpMap(self):
+        self.NewScene()
+        doDisplacement = True
+        mat = nerve.maya.Node.create('lambert')
+        sg = nerve.maya.Node.create('shadingGroup')
+        bump = nerve.maya.Node.create('bump2d')
+        tex = nerve.maya.Node.create('file')
+        if doDisplacement:
+            disp = nerve.maya.Node.create('displacementShader')
+            dtex = nerve.maya.Node.create('file')
+
+        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
+        cmds.setAttr(tex+'.colorSpace', 'Raw', type='string')
+
+        cmds.setAttr(bump+'.bumpDepth', 0.033)
+        cmds.setAttr(bump+'.bumpInterp',2)
+        if doDisplacement:
+            cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
+            cmds.setAttr(disp + '.scale', 0.5)
+
+        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
+        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
+        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
+        if doDisplacement:
+            cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
+            cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
+
+        cmds.select(mat, r=True)
+        data = nerve.maya.Material().ConvertToAbstract(mat)
+        #nerve.String.pprint(data['bump'])
+        nerve.maya.Material().Convert('RedshiftMaterial')
+    
+    @unittest.skip('skip')
+    def test_HasDisplacement(self):
+        self.NewScene()
+        mat = nerve.maya.Node.create('lambert')
+        sg = nerve.maya.Node.create('shadingGroup')
+        bump = nerve.maya.Node.create('bump2d')
+        tex = nerve.maya.Node.create('file')
+        disp = nerve.maya.Node.create('displacementShader')
+        dtex = nerve.maya.Node.create('file')
+
+        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
+        cmds.setAttr(bump+'.bumpDepth', 0.033)
+        cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
+        cmds.setAttr(disp + '.scale', 0.5)
+
+        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
+        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
+        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
+        cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
+        cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
+
+        cmds.select(mat, r=True)
+        material = nerve.maya.Material('test', version=1)
+        data = material.ConvertToAbstract(mat)
+        self.assertTrue(material.AbstractHasDisplacement(data))
+
+        self.NewScene()
+        mat = nerve.maya.Node.create('lambert')
+        sg = nerve.maya.Node.create('shadingGroup')
+        bump = nerve.maya.Node.create('bump2d')
+        tex = nerve.maya.Node.create('file')
+        #disp = nerve.maya.Node.create('displacementShader')
+        #dtex = nerve.maya.Node.create('file')
+
+        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
+        cmds.setAttr(bump+'.bumpDepth', 0.033)
+        #cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
+        #cmds.setAttr(disp + '.scale', 0.5)
+
+        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
+        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
+        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
+        #cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
+        #cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
+
+        cmds.select(mat, r=True)
+        material = nerve.maya.Material('test', version=1)
+        data = material.ConvertToAbstract(mat)
+        self.assertFalse(material.AbstractHasDisplacement(data))        
+
+
 
 
 def Run():

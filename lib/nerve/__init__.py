@@ -1519,7 +1519,82 @@ class Material(Asset):
         return {
         'diffuse': {
             'color': (1.0, 1.0, 1.0),
-            'weight': 0.8
+            'weight': 0.8,
+            'roughness': 0.0
+            },
+        'translucency':{
+            'color':(0.5, 0.5, 0.5),
+            'weight': 0.0,
+            },
+        'reflection': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 1.0,
+            'roughness': 0.22,
+            'anisotropy': 0.0,
+            'rotation': 0.0,
+            'metalness': 0.0,
+            'reflectivity': (0.04, 0.04, 0.04),
+            'ior': 1.5,
+            },
+        'refraction': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.0,
+            'roughness': 0.0,
+            'ior': 1.5,
+            'dispersion': 0.0,
+            'thinWalled': False,
+            'transmittance': (1.0, 1.0, 1.0),
+            'absorption': 1.0,
+            'extinction': (0.0, 0.0, 0.0),
+            'extinctionScale': 1.0
+            },
+        'sheen': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.0,
+            'roughness': 0.3,
+            },
+        'coat': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.0,
+            'roughness': 0.01,
+            'ior': 1.4
+            },
+        'sss': {
+            'weight': 0.0,
+            'radius': 1.0,
+            
+            'colorSingle': (1.0, 1.0, 1.0),
+            'weightSingle': 0.0,
+            'phaseSingle': 0.0,
+            'radiusSingle': 1.0,
+            # Skin
+            'colorShallow': (1.0, 0.9, 0.7),
+            'weightShallow': 0.6,
+            'radiusShallow': 0.038,
+            'colorMid': (0.95, 0.7, 0.5),
+            'weightMid': 0.25,
+            'radiusMid': 0.063,
+            'colorDeep': (0.7, 0.1, 0.1),
+            'weightDeep': 1.0,
+            'radiusDeep': 0.15,
+            },
+        'emission': {
+            'color': (0.0, 0.0, 0.0),
+            'weight': 0.0,
+            },
+        'opacity': {
+            'color': (1.0, 1.0, 1.0),
+            'transparency': (0.0, 0.0, 0.0),
+            },
+        'bump': {
+            'map': (0.0, 0.0, 0.0),
+            'height': 0.01,
+            'type': 0, # 0: Bump, 1: Tangent Space Normal, 2: Object Space Normal
+            },
+
+        'displacement': {
+            'map': None,
+            'scale': 1.0,
         },
         'textures': {}
     }
