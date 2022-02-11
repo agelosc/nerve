@@ -426,6 +426,7 @@ def rsConvertOpacityToSprite():
             nerve.maya.Node.connectAttr( sprite, 'outColor', sg, 'surfaceShader' )
 
         cmds.disconnectAttr(tex + '.outColor', mat + '.opacity_color')
+        nerve.maya.Node.setAttr( mat, 'opacity_color', (1,1,1))
 
 def rsConvertSpriteToOpacity():
     materials = nerve.maya.Node.GetMaterials()

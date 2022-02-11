@@ -1,4 +1,4 @@
-import os
+import os, sys, inspect
 import unittest
 
 try:
@@ -10,6 +10,7 @@ import nerve
 reload(nerve)
 import nerve.maya
 reload(nerve.maya)
+from nerve.maya import Node
 import nerve.maya.tools
 reload(nerve.maya.tools)
 
@@ -40,7 +41,8 @@ class Base(unittest.TestCase):
         cmds.connectAttr(setRange + '.outValue', reverse + '.input', f=True)
         cmds.connectAttr(reverse + '.outputX', mat + '.diffuse', f=True)
 
-        
+        Node.setAttr( tex, 'fileTextureName', 'color.jpg')
+        Node.setAttr(alpha, 'fileTextureName', 'alpha.jpg')
 
         return result
 
@@ -73,7 +75,7 @@ class Maya(Base):
         nerve.maya.Job.Set( path.AsString() )
         self.assertEqual( cmds.workspace(q=True, o=True), mayaproject.AsString())    
 
-class MayaNode(Base):
+class TestMayaNode(Base):
     @unittest.skip("skip")    
     def test_GetShadingEngines(self):
         self.NewScene()
@@ -100,7 +102,7 @@ class MayaNode(Base):
         self.assertIn( 'A', materials)
         self.assertIn( 'B', materials)           
 
-class MayaMaterial(Base):
+class TestMayaMaterial(Base):
     @unittest.skip("skip")    
     def test_concrete(self):
         self.NewScene()
@@ -219,14 +221,14 @@ class MayaMaterial(Base):
         # Simple Lambert
         self.NewScene()
         mat = self.CreateLambert('lambert')
-        nerve.maya.Node.setAttr(mat, 'color', (1,1,0))
-        nerve.maya.Node.setAttr(mat, 'diffuse', 0.72)
+        Node.setAttr(mat, 'color', (1,1,0))
+        Node.setAttr(mat, 'diffuse', 0.72)
 
         cmds.select(mat, r=True)
         material = nerve.maya.Material().Convert('RedshiftMaterial')[0]
 
-        self.assertEqual( nerve.maya.Node.getAttr(material, 'diffuse_color'), (1,1,0) )
-        self.assertAlmostEqual( nerve.maya.Node.getAttr(material, 'diffuse_weight'), 0.72 )
+        self.assertEqual( Node.getAttr(material, 'diffuse_color'), (1,1,0) )
+        self.assertAlmostEqual( Node.getAttr(material, 'diffuse_weight'), 0.72 )
         
         # Lambert With Textures
         self.NewScene()
@@ -234,9 +236,18 @@ class MayaMaterial(Base):
 
         cmds.select(net['mat'], r=True)
         material = nerve.maya.Material().Convert('RedshiftMaterial')[0]
-        self.assertTrue( cmds.isConnected(net['cc']+'.outColor', material+'.diffuse_color') )
-        self.assertTrue( cmds.isConnected(net['reverse']+'.outputX', material+'.diffuse_weight') )
+        tex = cmds.listConnections(material + '.diffuse_color', type='file')
+        self.assertTrue(tex)
+        tex = tex[0]
+        self.assertTrue( cmds.isConnected(tex+'.outColor', material+'.diffuse_color') )
+        self.assertEqual(Node.getAttr(tex, 'fileTextureName'), 'color.jpg')
 
+        tex = cmds.listConnections(material + '.diffuse_weight', type='file')
+        self.assertTrue(tex)
+        tex = tex[0]
+        self.assertTrue( cmds.isConnected(tex+'.outAlpha', material+'.diffuse_weight') )
+        self.assertEqual(Node.getAttr(tex, 'fileTextureName'), 'alpha.jpg')
+        
     @unittest.skip("skip")
     def test_allConcrete(self):
         self.NewScene()
@@ -250,6 +261,8 @@ class MayaMaterial(Base):
             for grp in table.keys():
                 data[grp] = {}
                 for key, attr in table[grp].items():
+                    if isinstance(attr, list):
+                        continue
                     rand = nerve.maya.Node.GetRandomValue( mat, attr )
                     data[grp][attr] = rand
                     nerve.maya.Node.setAttr( mat, attr, rand )
@@ -283,6 +296,8 @@ class MayaMaterial(Base):
             for grp in table.keys():
                 data[grp] = {}
                 for key, attr in table[grp].items():
+                    if isinstance(attr, list):
+                        continue
                     rand = nerve.maya.Node.GetRandomValue( mat, attr )
                     data[grp][attr] = rand
                     nerve.maya.Node.setAttr( mat, attr, rand )
@@ -298,6 +313,8 @@ class MayaMaterial(Base):
                 ctable = material.GetMaterialConvertTable( mattype, imattype)
                 for grp in ctable.keys():
                     for key, val in ctable[grp].items():
+                        if isinstance(val['src'], list) or isinstance(val['dest'], list):
+                            continue
                         if not (val['src'] and val['dest']):
                             continue
                         expectedVal = data[grp][ val['src'] ]
@@ -338,6 +355,8 @@ class MayaMaterial(Base):
                 for grp in table.keys():
                     data[grp] = {}
                     for key, attr in table[grp].items():
+                        if isinstance(attr, list):
+                            continue
                         rand = nerve.maya.Node.GetRandomValue( mat, attr )
                         data[grp][attr] = rand
                         nerve.maya.Node.setAttr( mat, attr, rand )
@@ -349,6 +368,8 @@ class MayaMaterial(Base):
                 ctable = material.GetMaterialConvertTable( mattype, imattype)
                 for grp in ctable.keys():
                     for key, val in ctable[grp].items():
+                        if isinstance(val['src'], list) or isinstance(val['dest'], list):
+                            continue
                         if not (val['src'] and val['dest']):
                             continue
                         expectedVal = data[grp][ val['src'] ]
@@ -433,13 +454,10 @@ class MayaMaterial(Base):
         #nerve.String.pprint(data['bump'])
         nerve.maya.Material().Convert('RedshiftMaterial')
     
-    #@unittest.skip('skip')
+    @unittest.skip('skip')
     def test_ConvertNoBumpMap(self):
         self.NewScene()
         net = self.CreateLambertNetwork()
-
-        #cmds.select(net['mat'], r=True)
-        #nerve.maya.Material().Convert('RedshiftMaterial')
 
     @unittest.skip('skip')
     def test_HasDisplacement(self):
@@ -491,7 +509,21 @@ class MayaMaterial(Base):
         data = material.ConvertToAbstract(mat)
         self.assertFalse(material.AbstractHasDisplacement(data))        
 
-class MayaTools(Base):
+    #@unittest('skip')
+    def test_transparencyToOpacity(self):
+        self.NewScene()
+        mat = Node.create('phong')
+        cmat = nerve.maya.Material().Convert('RedshiftMaterial')[0]
+        self.assertEqual( Node.getAttr(cmat, 'opacity_color'), (1,1,1))
+
+        self.NewScene()
+        mat = Node.create('RedshiftMaterial')
+        cmat = nerve.maya.Material().Convert('phong')[0]
+        self.assertEqual( Node.getAttr(cmat, 'transparency'), (0,0,0))
+
+
+
+class TestMayaTools(Base):
     def test_rsOpacityToSprite(self):
         self.NewScene()
         sg = nerve.maya.Node.create('shadingEngine')
@@ -502,18 +534,138 @@ class MayaTools(Base):
         nerve.maya.Node.connectAttr(tex, 'outColor', mat, 'opacity_color')
         nerve.maya.Node.connectAttr(mat, 'outColor', sg, 'surfaceShader')
 
-        #cmds.select(mat, r=True)
-        #nerve.maya.tools.rsConvertOpacityToSprite()
+        cmds.select(mat, r=True)
+        nerve.maya.tools.rsConvertOpacityToSprite()
 
-       # cmds.select('rsSprite1', r=True)
-        #nerve.maya.tools.rsConvertSpriteToOpacity()
+        self.assertEqual( nerve.maya.Node.getAttr(mat, 'opacity_color'), (1,1,1) )
+        self.assertFalse( cmds.listConnections(mat + '.opacity_color') )
+        
+        sprite = cmds.listConnections(mat + '.outColor', type='RedshiftSprite')
+        self.assertTrue(sprite)
+        sprite = sprite[0]
+        self.assertTrue( cmds.isConnected(mat + '.outColor', sprite + '.input') )
+        self.assertEqual( nerve.maya.Node.getAttr(sprite, 'tex0'), 'opacity.jpg' )
+
+    def test_rsSpriteToOpacity(self):
+        self.NewScene()
+        sg = Node.create('shadingEngine')
+        spr = Node.create('RedshiftSprite')
+        mat = Node.create('RedshiftMaterial')
+        
+        Node.setAttr( spr, 'tex0', 'opacity.jpg')
+        Node.connectAttr(spr, 'outColor', sg, 'surfaceShader')
+        Node.connectAttr(mat, 'outColor', spr, 'input')
+
+        cmds.select(spr, r=True)
+        nerve.maya.tools.rsConvertSpriteToOpacity()
+        
+        tex = cmds.listConnections(mat + '.opacity_color', type='file')
+        self.assertTrue(tex)
+        tex = tex[0]
+        self.assertEqual( Node.getAttr(tex, 'fileTextureName'), 'opacity.jpg' )
+        self.assertTrue( cmds.isConnected(mat + '.outColor', sg + '.surfaceShader') )
+
+class TestAlembic(Base):
+    def test_ReleaseGather(self):
+        self.NewScene()
+        
+        # Create Cube
+        cube = cmds.polyCube()
+        cmds.select(cube[0], r=True)
+        # Cube Sublayer
+        #cubeAsset = nerve.Asset('cube', format='abc', version=1)
+        cubeAsset = nerve.maya.Alembic('cube', version=1)
+        cubeAsset.Release()
+
+        self.NewScene()
+        cubeAsset.Gather('Import')
+        self.assertTrue( cmds.objExists(cube[0]) )
+        
+        # Create Sphere
+        cmds.file(new=True, f=True)
+        sphere = cmds.polySphere()
+        cmds.select(sphere[0], r=True)
+
+        # Sphere Sublayer
+        sphereAsset = nerve.maya.Alembic('sphere', version=1)
+        sphereAsset.Release()
+
+        # Import Replace
+        self.NewScene()
+        cubeAsset.Gather('Import')
+        cmds.select(cube[0], r=True)
+        sphereAsset.Gather('Replace')
+        self.assertTrue( cmds.objExists(sphere[0]) )
+
+        # Reference Replace
+        self.NewScene()
+        cubeAsset.Gather('Reference')
+        self.assertTrue( cmds.objExists( 'cube:'+cube[0] ) )
+        cmds.select('cube:'+cube[0], r=True)
+        sphereAsset.Gather('Replace')
+        self.assertTrue(cmds.objExists('cube:'+sphere[0]))
+
+        # Export Animation
+        self.NewScene()
+        cube = cmds.polyCube()
+        animcurve = [{'time':1, 'value':0 }, {'time':10, 'value':5}]
+        for crv in animcurve:
+            cmds.setKeyframe( cube[0] + '.ty', **crv )
+
+        cubeAnim = nerve.maya.Alembic('cubeAnim', version=1, frameRange=(1, 10))
+        cubeAnim.Release()
+
+        # Import Anim
+        self.NewScene()
+        cubeAnim.Gather()
+        for crv in animcurve:
+            cmds.currentTime(crv['time'], update=True)
+            self.assertEqual( crv['value'], Node.getAttr(cube[0], 'ty') )
+
+        # Reference Anim
+        self.NewScene()
+        cubeAnim.Gather('Reference')
+        for crv in animcurve:
+            cmds.currentTime(crv['time'], update=True)
+            self.assertEqual( crv['value'], Node.getAttr('cubeAnim:'+cube[0], 'ty') )
+
+        # Export Anim with deformation
+        self.NewScene()
+        plane = cmds.polyPlane(w=1, h=1, sx=2, sy=1, ax=(0,1,0))
+        bend = cmds.nonLinear(type='bend')
+        Node.setAttr(bend[1], 'rz', -90)
+        cmds.setKeyframe(bend[0] + '.curvature', v=0, t=1)
+        cmds.setKeyframe(bend[0] + '.curvature', v=-90, t=10)
+
+        planeAsset = nerve.maya.Alembic('planeDeform', version=1, frameRange=(1, 10))
+        cmds.select(plane[0], r=True)
+        planeAsset.Release()
+
+        # Import Anim with deformation
+        self.NewScene()
+        planeAsset.Gather('Import')
+        cmds.currentTime(1, update=True)
+        pos = cmds.xform(plane[0] + '.vtx[0]', q=True, ws=True, t=True)
+        self.assertAlmostEqual(tuple(pos), (-0.5, 0.0, 0.5) )
+        cmds.currentTime(10, update=True)
+        pos = cmds.xform(plane[0] + '.vtx[0]', q=True, ws=True, t=True)
+        self.assertAlmostEqual( tuple(pos), (-0.31830987334251404, 0.31830987334251404, 0.5) )
         
 
-def Run():
+
+def Run(test=None):
     testSuite = unittest.TestSuite()
-    #testSuite.addTest( unittest.makeSuite(Maya))
-    #testSuite.addTest( unittest.makeSuite(MayaNode))
-    #testSuite.addTest( unittest.makeSuite(MayaMaterial) )
-    testSuite.addTest( unittest.makeSuite(MayaTools) )
+    if not test:
+        for name, obj in inspect.getmembers(sys.modules[__name__]):
+            if inspect.isclass(obj) and name.startswith('Test'):
+                testSuite.addTest( unittest.makeSuite( obj ) )
+    else:
+        if not hasattr(sys.modules[__name__], test):
+            cmds.warning(test + ' test class not found.')
+            return False
+        obj = getattr(sys.modules[__name__], test)
+        if inspect.isclass(obj):
+            testSuite.addTest( unittest.makeSuite( obj ) )
+
     runner = unittest.TextTestRunner(verbosity=2)
     runner.run(testSuite)

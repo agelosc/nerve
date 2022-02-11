@@ -234,22 +234,21 @@ class Alembic(nerve.Asset, Base):
             if not cmds.pluginInfo(plugin, q=True, loaded=True):
                 cmds.loadPlugin(plugin)
 
-    def Export(self, file=None, **kwargs):
+    def Export(self, **kwargs):
         if not len(cmds.ls(sl=True)):
             print('Nothing selected.'),
             return False
 
-        if not file:
-            file = self.GetFilePath('session')
-        if not file.GetParent().Exists():
-            file.GetParent().Create()
+        filepath = self.GetFilePath('session')
+        if not filepath.GetParent().Exists():
+            filepath.GetParent().Create()
 
         options = ''
-        options+= ' -file {}'.format(file)
+        options+= ' -file {}'.format(filepath)
         for n in cmds.ls(sl=True, l=True):
             options+= ' -root {}'.format(n)
-        frameRange = kwargs['frameRange'] if 'frameRange' in kwargs.keys() else ( cmds.currentTime(q=True), cmds.currentTime(q=True) )
-        options+= ' -frameRange {} {}'.format( frameRange[0], frameRange[1] )
+        if self.data['frameRange']:
+            options+= ' -frameRange {} {}'.format(self.data['frameRange'][0], self.data['frameRange'][1])
         options+= ' -dataFormat ogawa'
         options+= ' -stripNamespaces'
         options+= ' -writeFaceSets'
@@ -259,12 +258,10 @@ class Alembic(nerve.Asset, Base):
         panel = cmds.paneLayout('viewPanes', q=True, pane1=True)
         cmds.isolateSelect(panel, state=1)
 
-        nerve.Path(file).GetParent().Create()
         cmds.AbcExport(j=options)
-
         cmds.isolateSelect(panel, state=0)
         
-        print('Asset {} released [Alembic]'.format(self.GetPath())),
+        #print('Asset {} released [Alembic]'.format(self.GetPath())),
 
         return True
 
@@ -1023,6 +1020,7 @@ class Node:
     @staticmethod
     def GetAttrData(node, attr):
         plug = node+'.'+attr
+        
         atype = cmds.getAttr(plug, type=True)
 
         data = {}
@@ -1033,7 +1031,7 @@ class Node:
             data['node'] = innode
             data['plug'] = inplug.replace(innode, '')[1:]
 
-        if atype in ['float', 'double', 'doubleAngle']:
+        if atype in ['float', 'double', 'doubleAngle', 'doubleLinear']:
             data['value'] = cmds.getAttr(plug)
             data['default'] = cmds.attributeQuery(attr, n=node, listDefault=True)[0]
             data['type'] = 'float'
@@ -1258,7 +1256,14 @@ class Material(nerve.Material, Base):
                         if all(x in cdata for x in ['attr', 'plug']):
                             if self.HasBump(data):
                                 Node.connectAttr(data[grp]['node'], cdata['plug'], material, cdata['attr'])
-                else:
+                else: # Doesn't have search node
+                    if grp == 'opacity':
+                        if 'transparency' in table[grp][key].lower(): # Invert
+                            
+                            if isinstance(data[grp][key], (tuple, list)):
+                                data[grp][key] = (1-data[grp][key][0], 1-data[grp][key][1], 1-data[grp][key][2])
+                            else:
+                                data[grp][key] = 1-data[grp][key]
                     self.SetAbstractData(material, attr, data[grp][key])
 
     def ConvertFromAbstractOLD(self, material, data):
@@ -1384,6 +1389,13 @@ class Material(nerve.Material, Base):
 
                 else: # concrete attribute should exist on node
                     attrdata = Node.GetAttrData(node, conc)
+                    if grp == 'opacity':
+                        if 'transparency' in conc.lower():
+                            if attrdata['type'] == 'vector':
+                                attrdata['value'] = (1-attrdata['value'][0], 1-attrdata['value'][1], 1-attrdata['value'][2])
+                            else:
+                                attrdata['value'] = 1 - attrdata['value']
+
                     data[grp][abst] = attrdata['value']
                     if 'node' in attrdata.keys():
                         data[grp][abst] = {}
@@ -1398,6 +1410,7 @@ class Material(nerve.Material, Base):
                     if data['displacement']['map']['texture']:
                         return True
         return False
+    
     def HasBump(self, data):
         if 'bump' in data.keys():
             if 'map' in data['bump'].keys():
@@ -1405,6 +1418,7 @@ class Material(nerve.Material, Base):
                     if data['bump']['map']['texture']:
                         return True
         return False    
+    
     def GetDisplacement(self, data):
         return data['displacement']['map']['node']
 
@@ -1431,7 +1445,7 @@ class Material(nerve.Material, Base):
             data[material] = {}
             data[material]['name'] = Node.CleanName(material)
             data[material]['type'] = cmds.nodeType(material)
-            data[material]['sets'] = self.GetShadingEngines(material)
+            data[material]['sets'] = Node.GetShadingEngines(material)
             data[material]['app'] = 'maya'
             # Concrete
             if concrete:
@@ -1471,6 +1485,7 @@ class Material(nerve.Material, Base):
             cmds.warning('Nothing Selected.')
             return False
         
+        matlist = []
         materials = Node.GetMaterials( sel )
         for material in materials:
             mattype = cmds.nodeType(material)
@@ -1483,6 +1498,7 @@ class Material(nerve.Material, Base):
             data = self.ConvertToAbstract(material)
 
             mat = Node.create(shader, name=material+'_'+shader)
+            matlist.append(mat)
             self.ConvertFromAbstract(mat, data)
 
             for sg in sgs:
@@ -1490,6 +1506,7 @@ class Material(nerve.Material, Base):
                 if self.HasDisplacement(data):
                    Node.connectAttr(data['displacement']['node'], data['displacement']['plug'], sg, 'displacementShader')
 
+        return matlist
     def ConvertOLD(self, shader, remove=True):
         sel = cmds.ls(sl=True, l=True)
         if not len(sel):
