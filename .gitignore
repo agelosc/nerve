@@ -1,3 +1,7 @@
 **/__pycache__/
 *.pyc
-.vcode
+.vscode/*
+
+lib/nerve/maya/tests.pyc
+lib/nerve/maya/tests.pyc
+lib/nerve/maya/__init__.pyc
