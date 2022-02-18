@@ -644,10 +644,9 @@ class Format:
     formats['fbx'] = 'FBX'
     formats['obj'] = 'OBJ'
     formats['rs'] = 'RedshiftProxy'
-
     formats['tex'] = 'Texture'
-
     #formats['hdr'] = 'HDRI'
+    formats['mat'] = 'Material'
 
     def __init__(self, format):
         for key in self.formats.keys():
@@ -662,7 +661,7 @@ class Format:
                 self.long = val
                 return None
 
-        raise Exception('Format {} Not Found.'.format(format))
+        #raise Exception('Format {} Not Found.'.format(format))
         
     def GetLong(self):
         return self.long
@@ -1023,16 +1022,18 @@ class Asset(Base):
         Base.__init__(self, **kwargs)
 
         defaults = {}
+        
         defaults['path'] = str(path)
         defaults['shot'] = ''
 
+        defaults['materials'] = False
         defaults['comment'] = ''
         defaults['version'] = 0
         defaults['frameRange'] = None
         defaults['filePerFrame'] = False
         defaults['format'] = 'usd'
 
-        self.SetDefaults(defaults, **kwargs)        
+        self.SetDefaults(defaults, **kwargs)
 
         self.SetPaths()
 
@@ -1379,7 +1380,7 @@ class Asset(Base):
                 self.gather.append(arg)
 
     def Release(self, _name=None, **kwargs):
-
+        
         if not len(self.release):
             Exception('Asset object does not have any release methods.')
 
@@ -1391,8 +1392,9 @@ class Asset(Base):
         
         if _name not in self.release:
             Exception('Asset object does not have a {} release method.'.format(_name))
-
-        return getattr(self, _name)(**kwargs)
+        
+        result =  getattr(self, _name)(**kwargs)
+        return result
 
     def Gather(self, _name=None, **kwargs):
         if not len(self.gather):
@@ -1461,60 +1463,36 @@ class Texture(Asset):
         cover.Square( self.GetCover() )
         return True
 
-class Material(Asset):
+class MateriaNEW(Asset):
     def __init__(self, path='', **kwargs):
         kwargs['format'] = 'mat'
         Asset.__init__(self, path, **kwargs)
 
+        self.SetExtension('json')
         self.matdata = {}
 
-    def GetTypes(self, prefix):
-        return [ m.replace(prefix+'_', '') for m in dir(self) if callable(getattr(self, m)) and m.startswith(prefix+'_') ]
-    
-    def GetTable(self, ttype, prefix):
-        if ttype not in self.GetTypes(prefix):
-            raise Exception('table not found: {}'.format(ttype))
-        return getattr(self, prefix+'_'+ttype)()
+    def SetMatData(self, grp, attr, val):
+        pass
 
-    def GetMaterialTypes(self):
-        return self.GetTypes('mat')
 
-    def GetConvertTable(self, src, dest, prefix='mat'):
-        data = self.abstract()
-        stable = self.GetTable(src, prefix)
-        dtable = self.GetTable(dest, prefix)
+    def SetMaterial(self, name=None):
+        if not name:
+            name = self.GetName()
+        if name not in self.matdata.keys():
+            self.matdata[name] = { 'abstract': {} }
 
-        for grp in data.keys():
-            for key, val in data[grp].items():
-                sval = None
-                if grp in stable.keys() and key in stable[grp].keys():
-                    sval = stable[grp][key]
-                
-                dval = None
-                if grp in dtable.keys() and key in dtable[grp].keys():
-                    dval = dtable[grp][key]
-                    
-                data[grp][key] = { 'src': sval, 'dest':dval }
-            
-        return data
+    def SetTexture(self, filepath, grp, attr, material=None, **kwargs ):
+        if not material:
+            material = self.GetName()
+        if not self.matdata or material not in self.matdata.keys():
+            self.SetMaterial(material)
 
-    def GetMaterialConvertTable(self, src, dest):
-        return self.GetConvertTable(src, dest, prefix='mat')
+        filepath = Path(filepath)
+        texdata = self.texture()
+        texdata['name'] = filepath.GetName()
+        texdata['filepath'] = filepath.AsString()
+        
 
-    def GetMaterialTable(self, mattype):
-        return self.GetTable(mattype, 'mat')
-
-    def GetUtilityTypes(self):
-        return self.GetTypes('util')
-
-    def GetUtilityTable(self, utiltype):
-        return self.GetTable(utiltype, 'util')
-
-    def GetAbstract(self, name):
-        if not hasattr(self, name):
-            raise Exception('{} not defined.'.format(name))
-        return getattr(self, name)()
-    
     def abstract(self):
         return {
         'diffuse': {
@@ -1535,6 +1513,7 @@ class Material(Asset):
             'metalness': 0.0,
             'reflectivity': (0.04, 0.04, 0.04),
             'ior': 1.5,
+            'type': 0, # types: 0=IOR, 1=metalness
             },
         'refraction': {
             'color': (1.0, 1.0, 1.0),
@@ -1608,7 +1587,196 @@ class Material(Asset):
             'outColor': True,
             'uvScale':(1.0, 1.0),
             'uvOffset': (0.0,0.0),
-            'uvRotate': 0,
+            'uvRotate': 0.0,
+        }
+        
+class Material(Asset):
+    def __init__(self, path='', **kwargs):
+        kwargs['format'] = 'mat'
+        Asset.__init__(self, path, **kwargs)
+
+        self.matdata = {}
+
+    def GetTypes(self, prefix):
+        return [ m.replace(prefix+'_', '') for m in dir(self) if callable(getattr(self, m)) and m.startswith(prefix+'_') ]
+    
+    def GetTable(self, ttype, prefix):
+        if ttype not in self.GetTypes(prefix):
+            raise Exception('table not found: {}'.format(ttype))
+        return getattr(self, prefix+'_'+ttype)()
+
+    def GetMaterialTypes(self):
+        return self.GetTypes('mat')
+
+    def GetConvertTable(self, src, dest, prefix='mat'):
+        data = self.abstract()
+        stable = self.GetTable(src, prefix)
+        dtable = self.GetTable(dest, prefix)
+
+        for grp in data.keys():
+            for key, val in data[grp].items():
+                sval = None
+                if grp in stable.keys() and key in stable[grp].keys():
+                    sval = stable[grp][key]
+                
+                dval = None
+                if grp in dtable.keys() and key in dtable[grp].keys():
+                    dval = dtable[grp][key]
+                    
+                data[grp][key] = { 'src': sval, 'dest':dval }
+            
+        return data
+
+    def GetMaterialConvertTable(self, src, dest):
+        return self.GetConvertTable(src, dest, prefix='mat')
+
+    def GetMaterialTable(self, mattype):
+        return self.GetTable(mattype, 'mat')
+
+    def GetUtilityTypes(self):
+        return self.GetTypes('util')
+
+    def GetUtilityTable(self, utiltype):
+        return self.GetTable(utiltype, 'util')
+
+    def GetAbstract(self, name):
+        if not hasattr(self, name):
+            raise Exception('{} not defined.'.format(name))
+        return getattr(self, name)()
+    
+    def GetMaterial(self, name=None):
+        if not name:
+            name = self.GetName()
+
+        if name not in self.matdata.keys():
+            self.matdata[name] = {'abstract':self.abstract()}
+
+        return self.matdata[name]
+
+    def AddMaterial(self, name=None):
+        if not name:
+            name = self.GetName()
+        if name not in self.matdata.keys():
+            self.matdata[name] = {'abstract': self.abstract()}
+
+    def AddTexture(self, filepath, path, material=None, **kwargs):
+        if not material:
+            material = self.GetName()
+
+        if not self.matdata or material not in self.matdata.keys():
+            self.AddMaterial(material)
+
+        filepath = Path(filepath)
+
+        path = Path(path)
+        if len(path.segments) != 2:
+            raise Exception('Invalid texture destination: '+path.AsString())
+        grp,key = path.segments
+
+        texdata = self.texture()
+        texdata['name'] =  filepath.GetName()
+        texdata['filepath'] = filepath.AsString()
+        
+        self.matdata[material]['abstract'][grp][key] = {'texture':texdata, 'value':(0,0,0)}
+        for key,val in kwargs.items():
+            if key in self.matdata[material]['abstract'][grp].keys():
+                self.matdata[material]['abstract'][grp][key] = val
+
+    def abstract(self):
+        return {
+        'diffuse': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.8,
+            'roughness': 0.0
+            },
+        'translucency':{
+            'color':(0.5, 0.5, 0.5),
+            'weight': 0.0,
+            },
+        'reflection': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 1.0,
+            'roughness': 0.22,
+            'anisotropy': 0.0,
+            'rotation': 0.0,
+            'metalness': 0.0,
+            'reflectivity': (0.04, 0.04, 0.04),
+            'ior': 1.5,
+            'type': 0, # types: 0=IOR, 1=metalness
+            },
+        'refraction': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.0,
+            'roughness': 0.0,
+            'ior': 1.5,
+            'dispersion': 0.0,
+            'thinWalled': False,
+            'transmittance': (1.0, 1.0, 1.0),
+            'absorption': 1.0,
+            'extinction': (0.0, 0.0, 0.0),
+            'extinctionScale': 1.0
+            },
+        'sheen': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.0,
+            'roughness': 0.3,
+            },
+        'coat': {
+            'color': (1.0, 1.0, 1.0),
+            'weight': 0.0,
+            'roughness': 0.01,
+            'ior': 1.4
+            },
+        'sss': {
+            'weight': 0.0,
+            'radius': 1.0,
+            
+            'colorSingle': (1.0, 1.0, 1.0),
+            'weightSingle': 0.0,
+            'phaseSingle': 0.0,
+            'radiusSingle': 1.0,
+            # Skin
+            'colorShallow': (1.0, 0.9, 0.7),
+            'weightShallow': 0.6,
+            'radiusShallow': 0.038,
+            'colorMid': (0.95, 0.7, 0.5),
+            'weightMid': 0.25,
+            'radiusMid': 0.063,
+            'colorDeep': (0.7, 0.1, 0.1),
+            'weightDeep': 1.0,
+            'radiusDeep': 0.15,
+            },
+        'emission': {
+            'color': (0.0, 0.0, 0.0),
+            'weight': 0.0,
+            },
+        'opacity': {
+            'color': (1.0, 1.0, 1.0),
+            'transparency': (0.0, 0.0, 0.0),
+            },
+        'bump': {
+            'map': None,
+            'height': 0.01,
+            'type': 0, # 0: Bump, 1: Tangent Space Normal, 2: Object Space Normal
+            },
+
+        'displacement': {
+            'map': None,
+            'scale': 1.0,
+        },
+        'textures': {}
+    }
+
+    def texture(self):
+        return {
+            'name':'',
+            'filepath':'',
+            'alphaIsLuminance':False,
+            'colorSpace':'sRGB',
+            'outColor': True,
+            'uvScale':(1.0, 1.0),
+            'uvOffset': (0.0,0.0),
+            'uvRotate': 0.0,
             'colorCorrect': self.colorCorrect(),
         }
         
