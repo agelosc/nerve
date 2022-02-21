@@ -66,6 +66,35 @@ class Base(unittest.TestCase):
 
         return mat
 
+
+    def assertDeepEqual(self, src, tar, path=''):
+        msg = '{} | src:{} tar:{}'.format(path, src, tar)
+
+        if isinstance(src, str) or isinstance(tar, str):
+            src = str(src)
+            tar = str(tar)
+            self.assertEqual(src, tar, msg=msg)
+            return True
+
+        self.assertIsInstance( src, type(tar), msg=msg )
+
+        if isinstance(src, float):
+            self.assertAlmostEqual(src, tar, msg=msg)
+            return True
+
+        if isinstance(src, int):
+            self.assertEqual(src, tar, msg=msg)
+            return True
+
+        if isinstance(src, tuple):
+            for i in range(len(src)):
+                self.assertAlmostEqual( src[i], tar[i], msg=msg)
+            return True
+        
+        if isinstance(src, dict):
+            for key in src.keys():
+                self.assertDeepEqual(src[key], tar[key], path+'/'+key)
+
 class Maya(Base):
     def test_Job(self):
         path = nerve.Path('$TEMP/nerve/mayaTests')
@@ -112,528 +141,148 @@ class TestMayaNode(Base):
         self.assertIn( 'B', materials)           
 
 class TestMayaMaterial(Base):
-    def test_CreateAbstractMaterial(self):
-        Mat = nerve.maya.Material('default', version=1)
-        
 
-class TestMayaMaterialOLD(Base):
-    def test_concrete(self):
+    def CreateAbstractNetwork(self):
+        Mat = nerve.maya.Material('abstract', version=1)
+
+        # Set Abstract Attributes & Textures
+        Mat.SetTexture('color.jpg', 'diffuse', 'color')
+        Mat.SetTexture('metalness.jpg', 'reflection', 'metalness')
+        Mat.Set(1, 'reflection', 'type')
+        Mat.SetTexture('bump.jpg', 'bump', 'map', type=0, height=0.5)
+        Mat.SetTexture('disp.jpg', 'displacement', 'map', scale=0.5)
+        #Mat.SetTexture('opacity.jpg', 'opacity', 'color')
+
+        return Mat
+
+    def test_Redsfhit(self):
         self.NewScene()
-        net = self.CreateLambertNetwork()
+        Mat = self.CreateAbstractNetwork()
 
-        # set values
-        matdata = {'translucence':0.1, 'translucenceDepth':0.2, 'ambientColor':(0.1, 0.2, 0.3) } 
-        for attr,val in matdata.items():
-            nerve.maya.Node.setAttr(net['mat'], attr, val)
-        ccdata = {'hueShift':0.1, 'satGain':0.2, 'valGain':0.3, 'colGain':(0.2, 0.3, 0.1), 'colGamma':(0.46, 0.46, 0.46) }
-        for attr,val in ccdata.items():
-            nerve.maya.Node.setAttr(net['cc'], attr, val)
-        srdata = {'min':(1,2,3), 'max':(4,5,6), 'oldMin':(7,8,9), 'oldMax':(10,11,12)}
-        for attr,val in srdata.items():
-            nerve.maya.Node.setAttr(net['setRange'], attr, val)
+        # Create Abstract Material as RedshiftMaterial
+        mat = Mat.GetAbstract('RedshiftMaterial')
 
-        cmds.select(net['mat'], r=True)
-        material = nerve.maya.Material('lambert', version=1)
-        material.Release(abstract=False)
+        # Create in-between texture node
+        reverse = Node.create('reverse')
+        Node.connectAttr('metalness', 'outColor', reverse, 'input')
+        Node.connectAttr(reverse, 'outputX', 'abstract', 'refl_metalness')
 
+        # Create Empty Material
+        MatMaya = nerve.maya.Material('abstract', version=1)
+        MatMaya.SetAbstract(mat)
+
+        self.assertDeepEqual( Mat.matdata, MatMaya.matdata )
+
+        # Set Concrete
+        MatMaya.SetConcrete(mat)
+        # Get All Nodes
+        sg = cmds.listConnections(mat + '.outColor', type='shadingEngine')
+        nodes = cmds.listHistory(sg[0])
+
+        # Re-create Concrete
         self.NewScene()
-        # Create clashing node name
-        cmds.shadingNode('setRange', asUtility=True, name='colorTex')
-        material.Gather()
+        MatMaya.GetConcrete(mat)
+        # Assert the same nodes exist in new scene
+        for n in nodes:
+            self.assertTrue( cmds.objExists(n))
 
-        for attr,val in matdata.items():
-            self.assertTrue( nerve.maya.Node.getAttr(net['mat'], attr), val )
-        for attr, val in ccdata.items():
-            self.assertTrue( nerve.maya.Node.getAttr(net['cc'], attr), val )
-        for attr, val in srdata.items():
-            self.assertTrue( nerve.maya.Node.getAttr(net['setRange'], attr), val ) 
-
-    def test_concreteWithNamespace(self):
+    def MaterialTypeTest(self, shader):
         self.NewScene()
-        ns = 'NS'
-        cmds.namespace(add=ns)
-        cmds.namespace(setNamespace=ns)
-        net = self.CreateLambertNetwork()
+        Mat = self.CreateAbstractNetwork()
+        mat = Mat.GetAbstract(shader)
 
-        cmds.select(net['mat'], r=True)
-        material = nerve.maya.Material('lambert', version=1)
-        material.Release(abstract=False)
+        MatMaya = nerve.maya.Material('abstract', version=1)
+        MatMaya.SetAbstract(mat)
 
-        self.NewScene()
-        material.Gather()
+        table = Mat.GetMaterialTable(shader)
+        for grp in table.keys():
+            for key in Mat.matdata['abstract']['abstract'][grp].keys():
+                src = Mat.matdata['abstract']['abstract'][grp][key]
+                tar = MatMaya.matdata['abstract']['abstract'][grp][key]
 
-        for key,name in net.items():
-            self.assertFalse( cmds.objExists( name) )
-            self.assertTrue( cmds.objExists( nerve.maya.Node.CleanName(name)) )  
-
-    def test_simpleAbstract(self):
-        # Release Lambert Abstract
-        self.NewScene()
-        mat = nerve.maya.Node.create('lambert')
-        matdata = {'color':(1.0,1.0,0.0), 'diffuse':0.435}
-        for key,val in matdata.items():
-            nerve.maya.Node.setAttr(mat, key, val)
-
-        cmds.select(mat, r=True)
-        material = nerve.maya.Material('lambert', version=1)
-        material.Release(concrete=False)
-
-        # Gather Lambert
-        self.NewScene()
-        material.Gather()
-        self.assertTrue( cmds.objExists(mat) )
-        for key,val in matdata.items():
-            self.assertAlmostEqual( nerve.maya.Node.getAttr(mat, key), val )
-
-        # Gather usdPreviewSurface
-        self.NewScene()
-        material.Gather(shader='usdPreviewSurface')
-        self.assertEqual( nerve.maya.Node.getAttr(mat, 'diffuseColor'), matdata['color'])
-
-        # Gather RedshiftMaterial
-        self.NewScene()
-        material.Gather(shader='RedshiftMaterial')
-
-        # Release RedshiftMaterial
-        mat = nerve.maya.Node.create('RedshiftMaterial')
-        matdata = {'diffuse_color': (1,1,0), 'diffuse_weight':0.23}
-        for key,val in matdata.items():
-            nerve.maya.Node.setAttr( mat, key, val)
-
-        cmds.select(mat, r=True)
-        material.Release()
-
-        # Gather Lambert
-        self.NewScene()
-        material.Gather()
-        self.assertEqual(nerve.maya.Node.getAttr(mat, 'color'), matdata['diffuse_color'])
-        self.assertAlmostEqual(nerve.maya.Node.getAttr(mat, 'diffuse'), matdata['diffuse_weight'])
-
-        # Gather standardSurface
-        self.NewScene()
-        material.Gather(shader='standardSurface')
-        self.assertEqual(nerve.maya.Node.getAttr(mat, 'baseColor'), matdata['diffuse_color'])
-        self.assertAlmostEqual(nerve.maya.Node.getAttr(mat, 'base'), matdata['diffuse_weight'])
-    
-    def test_abstractWithTextures(self):
-        self.NewScene()
-        net = self.CreateLambertNetwork()
-        
-        cmds.select(net['mat'], r=True)
-        material = nerve.maya.Material('abstractWithTextures', version=1)
-        material.Release(concrete=False)
-
-        self.NewScene()
-        material.Gather(shader='RedshiftMaterial')
-    
-    def test_convert(self):
-        # Simple Lambert
-        self.NewScene()
-        mat = self.CreateLambert('lambert')
-        Node.setAttr(mat, 'color', (1,1,0))
-        Node.setAttr(mat, 'diffuse', 0.72)
-
-        cmds.select(mat, r=True)
-        material = nerve.maya.Material().Convert('RedshiftMaterial')[0]
-
-        self.assertEqual( Node.getAttr(material, 'diffuse_color'), (1,1,0) )
-        self.assertAlmostEqual( Node.getAttr(material, 'diffuse_weight'), 0.72 )
-        
-        # Lambert With Textures
-        self.NewScene()
-        net = self.CreateLambertNetwork()
-
-        cmds.select(net['mat'], r=True)
-        material = nerve.maya.Material().Convert('RedshiftMaterial')[0]
-        tex = cmds.listConnections(material + '.diffuse_color', type='file')
-        self.assertTrue(tex)
-        tex = tex[0]
-        self.assertTrue( cmds.isConnected(tex+'.outColor', material+'.diffuse_color') )
-        self.assertEqual(Node.getAttr(tex, 'fileTextureName'), 'color.jpg')
-
-        tex = cmds.listConnections(material + '.diffuse_weight', type='file')
-        self.assertTrue(tex)
-        tex = tex[0]
-        self.assertTrue( cmds.isConnected(tex+'.outAlpha', material+'.diffuse_weight') )
-        self.assertEqual(Node.getAttr(tex, 'fileTextureName'), 'alpha.jpg')
-        
-    def test_allConcrete(self):
-        self.NewScene()
-        material = nerve.maya.Material('material', version=1)
-        mattypes = material.GetMaterialTypes()
-        for mattype in mattypes:
-            #self.NewScene()
-            mat = nerve.maya.Node.create(mattype)
-            table = material.GetMaterialTable( mattype )
-            data = {}
-            for grp in table.keys():
-                data[grp] = {}
-                for key, attr in table[grp].items():
-                    if isinstance(attr, list):
+                if shader in ['lambert', 'usdPreviewSurface', 'standardSurface', 'phong', 'phongE', 'blinn', 'surfaceShader']:
+                    if grp == 'reflection' and key == 'type':
                         continue
-                    rand = nerve.maya.Node.GetRandomValue( mat, attr )
-                    data[grp][attr] = rand
-                    nerve.maya.Node.setAttr( mat, attr, rand )
-            
-            cmds.select(mat, r=True)
-            material.Release(abstract=False)
 
-            self.NewScene()
-            newmat = material.Gather(shader=mattype)[0]
-            for grp in data.keys():
-                for attr, val in data[grp].items():
-                    attrdata = nerve.maya.Node.GetAttrData(newmat, attr)
-                    if attrdata['type'] == 'float':
-                        self.assertAlmostEqual( nerve.maya.Node.getAttr(newmat, attr), val, 2 )
-                    elif attrdata['type'] == 'vector':
-                        for i in range(3):
-                            self.assertAlmostEqual( nerve.maya.Node.getAttr(newmat, attr)[i], val[i], 2  )
-                    else:
-                        self.assertEqual( nerve.maya.Node.getAttr(newmat, attr), val  )
-    
-    def test_allAbstract(self):
-        self.NewScene()
-        material = nerve.maya.Material('material', version=1)
-        mattypes = material.GetMaterialTypes()
-        for mattype in mattypes:
-            #self.NewScene()
-            mat = nerve.maya.Node.create(mattype)
-            table = material.GetMaterialTable( mattype )
-            data = {}
-            for grp in table.keys():
-                data[grp] = {}
-                for key, attr in table[grp].items():
-                    if isinstance(attr, list):
-                        continue
-                    rand = nerve.maya.Node.GetRandomValue( mat, attr )
-                    data[grp][attr] = rand
-                    nerve.maya.Node.setAttr( mat, attr, rand )
-            
-            cmds.select(mat, r=True)
-            material.Release(concrete=False)
-            
-            for imattype in mattypes:
-                self.NewScene()
-                newmat = material.Gather(shader=imattype)[0]
-                print('Gathering {} as abstract {}...'.format(mattype, imattype))
-
-                ctable = material.GetMaterialConvertTable( mattype, imattype)
-                for grp in ctable.keys():
-                    for key, val in ctable[grp].items():
-                        if isinstance(val['src'], list) or isinstance(val['dest'], list):
-                            continue
-                        if not (val['src'] and val['dest']):
-                            continue
-                        expectedVal = data[grp][ val['src'] ]
-                        currentVal = nerve.maya.Node.getAttr( newmat, val['dest'] )
-                        # Skip type mistmatch
-                        if type(expectedVal) != type(currentVal):
-                            continue
-
-                        attrdata = nerve.maya.Node.GetAttrData(newmat, val['dest'])
-
-                        if attrdata['type'] == 'float':
-                            # skip tests that exceed range
-                            if 'min' in attrdata.keys() and expectedVal < attrdata['min']:
-                                continue
-                            if 'max' in attrdata.keys() and expectedVal > attrdata['max']:
-                                continue              
-                            self.assertAlmostEqual( expectedVal, currentVal, 2 )
-                        elif attrdata['type'] == 'vector':
-                            for i in range(3):
-                                self.assertAlmostEqual( expectedVal[i], currentVal[i], 2  )
-                        else:
-                            self.assertEqual( expectedVal, currentVal  )            
-
-    def test_allConvert(self):
-        self.NewScene()
-        material = nerve.maya.Material('material', version=1)
-        mattypes = material.GetMaterialTypes()
-        for mattype in mattypes:
-            for imattype in mattypes:
-                if imattype == mattype:
+                if shader == 'usdPreviewSurface' and grp == 'opacity' and key == 'color':
                     continue
-                self.NewScene()
-                mat = nerve.maya.Node.create(mattype)
-                table = material.GetMaterialTable( mattype )
-
-                data = {}
-                for grp in table.keys():
-                    data[grp] = {}
-                    for key, attr in table[grp].items():
-                        if isinstance(attr, list):
-                            continue
-                        rand = nerve.maya.Node.GetRandomValue( mat, attr )
-                        data[grp][attr] = rand
-                        nerve.maya.Node.setAttr( mat, attr, rand )
-
-                print('Converting {} to {}'.format(mattype, imattype))
-                cmds.select(mat, r=True)
-                newmat = material.Convert(imattype)[0]
-
-                ctable = material.GetMaterialConvertTable( mattype, imattype)
-                for grp in ctable.keys():
-                    for key, val in ctable[grp].items():
-                        if isinstance(val['src'], list) or isinstance(val['dest'], list):
-                            continue
-                        if not (val['src'] and val['dest']):
-                            continue
-                        expectedVal = data[grp][ val['src'] ]
-                        currentVal = nerve.maya.Node.getAttr( newmat, val['dest'] )
-                        # Skip type mistmatch
-                        if type(expectedVal) != type(currentVal):
-                            continue
-
-                        attrdata = nerve.maya.Node.GetAttrData(newmat, val['dest'])
-
-                        if attrdata['type'] == 'float':
-                            # skip tests that exceed range
-                            if 'min' in attrdata.keys() and expectedVal < attrdata['min']:
-                                continue
-                            if 'max' in attrdata.keys() and expectedVal > attrdata['max']:
-                                continue              
-                            self.assertAlmostEqual( expectedVal, currentVal, 2 )
-                        elif attrdata['type'] == 'vector':
-                            for i in range(3):
-                                self.assertAlmostEqual( expectedVal[i], currentVal[i], 2  )
-                        else:
-                            self.assertEqual( expectedVal, currentVal  ) 
-
-    def test_AbstractBumpMap(self):
-        self.NewScene()
-        mat = nerve.maya.Node.create('lambert')
-        sg = nerve.maya.Node.create('shadingGroup')
-        bump = nerve.maya.Node.create('bump2d')
-        tex = nerve.maya.Node.create('file')
-        disp = nerve.maya.Node.create('displacementShader')
-        dtex = nerve.maya.Node.create('file')
-
-        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
-        cmds.setAttr(bump+'.bumpDepth', 0.033)
-        cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
-        cmds.setAttr(disp + '.scale', 0.5)
-
-        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
-        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
-        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
-        cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
-        cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
-
-        cmds.select(mat, r=True)
-        material = nerve.maya.Material('bump', version=1)
-        material.Release(concrete=False)
-        self.NewScene()
-        material.Gather(shader='RedshiftMaterial')
-    
-    def test_ConvertBumpMap(self):
-        self.NewScene()
-        doDisplacement = True
-        mat = nerve.maya.Node.create('lambert')
-        sg = nerve.maya.Node.create('shadingGroup')
-        bump = nerve.maya.Node.create('bump2d')
-        tex = nerve.maya.Node.create('file')
-        if doDisplacement:
-            disp = nerve.maya.Node.create('displacementShader')
-            dtex = nerve.maya.Node.create('file')
-
-        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
-        cmds.setAttr(tex+'.colorSpace', 'Raw', type='string')
-
-        cmds.setAttr(bump+'.bumpDepth', 0.033)
-        cmds.setAttr(bump+'.bumpInterp',2)
-        if doDisplacement:
-            cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
-            cmds.setAttr(disp + '.scale', 0.5)
-
-        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
-        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
-        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
-        if doDisplacement:
-            cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
-            cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
-
-        cmds.select(mat, r=True)
-        data = nerve.maya.Material().ConvertToAbstract(mat)
-        #nerve.String.pprint(data['bump'])
-        nerve.maya.Material().Convert('RedshiftMaterial')
-    
-    def test_ConvertNoBumpMap(self):
-        self.NewScene()
-        net = self.CreateLambertNetwork()
-
-    def test_HasDisplacement(self):
-        self.NewScene()
-        mat = nerve.maya.Node.create('lambert')
-        sg = nerve.maya.Node.create('shadingGroup')
-        bump = nerve.maya.Node.create('bump2d')
-        tex = nerve.maya.Node.create('file')
-        disp = nerve.maya.Node.create('displacementShader')
-        dtex = nerve.maya.Node.create('file')
-
-        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
-        cmds.setAttr(bump+'.bumpDepth', 0.033)
-        cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
-        cmds.setAttr(disp + '.scale', 0.5)
-
-        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
-        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
-        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
-        cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
-        cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
-
-        cmds.select(mat, r=True)
-        material = nerve.maya.Material('test', version=1)
-        data = material.ConvertToAbstract(mat)
-        self.assertTrue(material.AbstractHasDisplacement(data))
-
-        self.NewScene()
-        mat = nerve.maya.Node.create('lambert')
-        sg = nerve.maya.Node.create('shadingGroup')
-        bump = nerve.maya.Node.create('bump2d')
-        tex = nerve.maya.Node.create('file')
-        #disp = nerve.maya.Node.create('displacementShader')
-        #dtex = nerve.maya.Node.create('file')
-
-        cmds.setAttr(tex+'.fileTextureName', 'bump.jpg', type='string')
-        cmds.setAttr(bump+'.bumpDepth', 0.033)
-        #cmds.setAttr(dtex + '.fileTextureName', 'disp.jpg', type='string')
-        #cmds.setAttr(disp + '.scale', 0.5)
-
-        cmds.connectAttr(tex + '.outAlpha', bump + '.bumpValue', f=True)
-        cmds.connectAttr(bump + '.outNormal', mat + '.normalCamera', f=True)
-        cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
-        #cmds.connectAttr(disp + '.displacement', sg + '.displacementShader', f=True)
-        #cmds.connectAttr(dtex + '.outColor', disp + '.vectorDisplacement', f=True)
-
-        cmds.select(mat, r=True)
-        material = nerve.maya.Material('test', version=1)
-        data = material.ConvertToAbstract(mat)
-        self.assertFalse(material.AbstractHasDisplacement(data))        
-
-    def test_transparencyToOpacity(self):
-        self.NewScene()
-        mat = Node.create('phong')
-        cmat = nerve.maya.Material().Convert('RedshiftMaterial')[0]
-        self.assertEqual( Node.getAttr(cmat, 'opacity_color'), (1,1,1))
-
-        self.NewScene()
-        mat = Node.create('RedshiftMaterial')
-        cmat = nerve.maya.Material().Convert('phong')[0]
-        self.assertEqual( Node.getAttr(cmat, 'transparency'), (0,0,0))
-
-    def assertDeepDictEqual(self, src, tar):
-
-        if isinstance(src, str) or isinstance(tar, str):
-            src = str(src)
-            tar = str(tar)
+                self.assertDeepEqual( src , tar, grp+'/'+key )
         
-        self.assertEqual( type(src), type(tar), 'src: '+str(src) + ' tar: '+str(tar) )
-
-        for key in src.keys():
-            self.assertIn(key, tar.keys())
-
-            if isinstance(src[key], str) or isinstance(tar[key], str):
-                src[key] = str(src[key])
-                tar[key] = str(tar[key])
-
-            self.assertEqual( type(src[key]), type(tar[key]), ('src['+key+']: '+str(src[key]) + ' tar['+key+']: '+str(tar[key])) )
-
-            if isinstance(src[key], dict):
-                self.assertDeepDictEqual(src[key], tar[key])
-                continue
-            if isinstance(src[key], float):
-                self.assertAlmostEqual(src[key], tar[key])
-                continue
-
-
-            self.assertEqual(src[key], tar[key])
-
-    def test_defaultMaterial(self):
+        sg = cmds.listConnections(mat + '.outColor', type='shadingEngine')
+        nodes = cmds.listHistory(sg[0])
         self.NewScene()
-        mat = Node.create('lambert', 'material')
-        # set abstract defaults
-        Node.setAttr(mat, 'color', (1,1,1))
+        MatMaya.GetAbstract(shader)
 
-        material = nerve.maya.Material('material', version=1)
-        matdata = material.ConvertToAbstract(mat)
-        
-        cmaterial = nerve.maya.Material('material', version=1)
-        cmatdata = cmaterial.GetMaterial()
+        for n in nodes:
+            self.assertTrue( cmds.objExists(n) )
 
-        self.assertDeepDictEqual(matdata, cmatdata)
+    def test_lambert(self):
+        self.MaterialTypeTest('lambert')
 
-    def test_MaterialTexture(self):
+    def test_phong(self):
+        self.MaterialTypeTest('phong')
+
+    def test_blinn(self):
+        self.MaterialTypeTest('blinn') 
+
+    def test_standardSurface(self):
+        self.MaterialTypeTest('standardSurface')
+
+    def test_usdPreviewSurface(self):
+        self.MaterialTypeTest('usdPreviewSurface')
+
+    def test_phongE(self):
+        self.MaterialTypeTest('phongE') 
+
+    def test_surfaceShader(self):
+        self.MaterialTypeTest('surfaceShader')               
+
+    def test_convert(self):
         self.NewScene()
-        mat = Node.create('lambert')
-        tex = Node.create('file', 'color')
-        Node.setAttr(tex, 'fileTextureName', 'color.jpg')
-        Node.connectAttr(tex, 'outColor', mat, 'color')
-        
-        material = nerve.maya.Material('material', version=1)
-        matdata = material.ConvertToAbstract(mat)
+        Mat = self.CreateAbstractNetwork()
 
-        cmaterial = nerve.maya.Material('material', version=1)
-        cmaterial.AddTexture('color.jpg', 'diffuse/color')
-        cmatdata = cmaterial.GetMaterial()
+        mat = Mat.GetAbstract('RedshiftMaterial')
+        cmds.select(mat, r=True)
+        Mat.Convert('lambert')
+        cmds.select(mat, r=True)
+        Mat.Convert('phong')
 
-        self.assertDeepDictEqual(matdata, cmatdata)
-
-    def test_ReflectionType(self):
-        self.NewScene()
-
-        mat = Node.create('RedshiftMaterial')
-        Node.setAttr(mat, 'refl_fresnel_mode', 2)
-        material = nerve.maya.Material('test', version=1)
-        abstract = material.ConvertToAbstract( mat )
-
-        self.assertEqual(abstract['reflection']['type'], 1)
-
-        self.NewScene()
-
-        mat = Node.create('RedshiftMaterial')
-        material.ConvertFromAbstract(mat, abstract)
-        return False
-
-        mat = Node.create('RedshiftMaterial')
-        Node.setAttr(mat, 'refl_fresnel_mode', 3)
-        material = nerve.maya.Material('test', version=1)
-        abstract = material.ConvertToAbstract( mat )
-
-        self.assertEqual(abstract['reflection']['type'], 0)
-
-    def test_MaterialTextureFiles(self):
+    def test_importExport(self):
         self.NewScene(True)
+        Mat = self.CreateAbstractNetwork()
+        mat = Mat.GetAbstract('RedshiftMaterial')
 
-        material = nerve.maya.Material('concreteA')
+        cmds.select(mat, r=True)
+        Mat.Release()
+
+        self.NewScene()
+        Mat.Gather()
+
+    def test_exportTextures(self):
+        self.NewScene(True)
+        Mat = nerve.maya.Material('abstract', version=1)
+
+        # Set Abstract Attributes & Textures
         path = nerve.Path('$NERVE_LOCAL_PATH/test/testSamples/mat')
 
-        material.AddTexture(path + 'color.jpg', 'diffuse/color')
-        material.AddTexture(path + 'gloss.jpg', 'reflection/roughness')
-        material.AddTexture(path + 'normal.jpg', 'bump/map', type=1)
-        material.AddTexture(path + 'refl.jpg', 'reflection/metalness', type=1)
+        Mat.SetTexture(path+'color.jpg', 'diffuse', 'color')
+        Mat.SetTexture(path+'gloss.jpg', 'reflection', 'roughness')
+        Mat.SetTexture(path+'normal.jpg', 'bump', 'map', type=1)
+        Mat.SetTexture(path+'refl.jpg', 'reflection', 'metalness', type=1)
 
-        material.Release()
-        print("")
-        print('type:', material.matdata['concreteA']['abstract']['reflection']['type'])
+        mat = Mat.GetAbstract()
+        MatMaya = nerve.maya.Material('abstract', version=1)
+        cmds.select(mat, r=True)
+        MatMaya.SetAbstract( mat )
+        MatMaya.SetConcrete( mat )
+        
+        MatMaya.Release()
 
-        #material.Gather(shader='RedshiftMaterial')
-
-    def test_AssetWithMaterial(self):
-        self.NewScene(False)
-        cube = cmds.polyCube()
-        matYellow = self.CreateMaterialAndAssign('lambert', cube[0], 'yellow')
-        matRed = self.CreateMaterialAndAssign('lambert', cube[0] + '.f[0]', 'red')
-        Node.setAttr(matYellow, 'color', (1,1,0))
-        Node.setAttr(matRed, 'color', (1,0,0))
-
-        asset = nerve.maya.asset(path='cube', version=1, format='mb', materials=True)
-        cmds.select(cube[0], r=True)
-        asset.Release()
-
-        #mat = nerve.maya.asset(path='cube/materials', version=1, format='mat')
-        #cmds.select(cube[0], r=True)
-        #mat.Release()
-
+        self.NewScene()
+        MatMaya.Gather()
+        for tex in cmds.ls(type='file'):
+            ftp = nerve.Path(Node.getAttr(tex, 'fileTextureName')).GetParent()
+            self.assertEqual( ftp.AsString(), MatMaya.GetFilePath('textures').AsString() )
         
 class TestMayaTools(Base):
     def test_rsOpacityToSprite(self):
@@ -789,10 +438,10 @@ class TestAlembic(Base):
         if True:
             self.NewScene()
             abc.Gather()
-            #self.assertTrue( cmds.objExists('yellow_SG') )
-            #self.assertTrue( cmds.objExists('red_SG') )
-            #self.assertEqual( cmds.sets('yellow_SG', q=True), [cube[0] + '.f[1:5]'] )
-            #self.assertEqual( cmds.sets('red_SG', q=True), [cube[0] + '.f[0]'] )
+            self.assertTrue( cmds.objExists('yellow_SG') )
+            self.assertTrue( cmds.objExists('red_SG') )
+            self.assertEqual( cmds.sets('yellow_SG', q=True), [cube[0] + '.f[1:5]'] )
+            self.assertEqual( cmds.sets('red_SG', q=True), [cube[0] + '.f[0]'] )
 
 def Run(test=None):
     testSuite = unittest.TestSuite()

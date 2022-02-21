@@ -1463,23 +1463,50 @@ class Texture(Asset):
         cover.Square( self.GetCover() )
         return True
 
-class MateriaNEW(Asset):
+class Material(Asset):
     def __init__(self, path='', **kwargs):
         kwargs['format'] = 'mat'
         Asset.__init__(self, path, **kwargs)
+        self.paths['textures'] = '{0}/{1}/textures/'.format(self.GetRootPath(), self.GetName())
 
         self.SetExtension('json')
         self.matdata = {}
 
-    def SetMatData(self, grp, attr, val):
-        pass
-
+    def MinMatdata(self):
+        abstract = self.abstract()
+        for material in self.matdata.keys():
+            for grp in self.matdata[material]['abstract'].keys():
+                for attr, value in self.matdata[material]['abstract'][grp].items():
+                    if isinstance(value, dict):
+                        continue
+                    if value != abstract[grp][attr]:
+                        continue
+                    del(self.matdata[material]['abstract'][grp][attr])
+            
+            for grp in self.matdata[material]['abstract'].keys():
+                if not self.matdata[material]['abstract'][grp]:
+                    del(self.matdata[material]['abstract'][grp])
 
     def SetMaterial(self, name=None):
         if not name:
             name = self.GetName()
         if name not in self.matdata.keys():
-            self.matdata[name] = { 'abstract': {} }
+            self.matdata[name] = { 'abstract': self.abstract() }
+
+    def Set(self, value, grp, attr, material=None, **kwargs):
+        if not material:
+            material = self.GetName()
+        if not self.matdata or material not in self.matdata.keys():
+            self.SetMaterial(material)
+
+        self.matdata[material]['abstract'][grp][attr] = value
+        for key,val in kwargs.items():
+            # Set other grp value
+            if key in self.matdata[material]['abstract'][grp].keys():
+                self.matdata[material]['abstract'][grp][key] = val
+            # set other texture value
+            if key in self.matdata[material]['abstract'][grp][attr].keys():
+                self.matdata[material]['abstract'][grp][attr][key] = val            
 
     def SetTexture(self, filepath, grp, attr, material=None, **kwargs ):
         if not material:
@@ -1491,198 +1518,40 @@ class MateriaNEW(Asset):
         texdata = self.texture()
         texdata['name'] = filepath.GetName()
         texdata['filepath'] = filepath.AsString()
-        
+        if grp in ['bump', 'displacement']:
+            texdata['colorSpace'] = 'Raw'
+        if attr in ['roughness']:
+            texdata['colorSpace'] = 'Raw'
 
-    def abstract(self):
-        return {
-        'diffuse': {
-            'color': (1.0, 1.0, 1.0),
-            'weight': 0.8,
-            'roughness': 0.0
-            },
-        'translucency':{
-            'color':(0.5, 0.5, 0.5),
-            'weight': 0.0,
-            },
-        'reflection': {
-            'color': (1.0, 1.0, 1.0),
-            'weight': 1.0,
-            'roughness': 0.22,
-            'anisotropy': 0.0,
-            'rotation': 0.0,
-            'metalness': 0.0,
-            'reflectivity': (0.04, 0.04, 0.04),
-            'ior': 1.5,
-            'type': 0, # types: 0=IOR, 1=metalness
-            },
-        'refraction': {
-            'color': (1.0, 1.0, 1.0),
-            'weight': 0.0,
-            'roughness': 0.0,
-            'ior': 1.5,
-            'dispersion': 0.0,
-            'thinWalled': False,
-            'transmittance': (1.0, 1.0, 1.0),
-            'absorption': 1.0,
-            'extinction': (0.0, 0.0, 0.0),
-            'extinctionScale': 1.0
-            },
-        'sheen': {
-            'color': (1.0, 1.0, 1.0),
-            'weight': 0.0,
-            'roughness': 0.3,
-            },
-        'coat': {
-            'color': (1.0, 1.0, 1.0),
-            'weight': 0.0,
-            'roughness': 0.01,
-            'ior': 1.4
-            },
-        'sss': {
-            'weight': 0.0,
-            'radius': 1.0,
-            
-            'colorSingle': (1.0, 1.0, 1.0),
-            'weightSingle': 0.0,
-            'phaseSingle': 0.0,
-            'radiusSingle': 1.0,
-            # Skin
-            'colorShallow': (1.0, 0.9, 0.7),
-            'weightShallow': 0.6,
-            'radiusShallow': 0.038,
-            'colorMid': (0.95, 0.7, 0.5),
-            'weightMid': 0.25,
-            'radiusMid': 0.063,
-            'colorDeep': (0.7, 0.1, 0.1),
-            'weightDeep': 1.0,
-            'radiusDeep': 0.15,
-            },
-        'emission': {
-            'color': (0.0, 0.0, 0.0),
-            'weight': 0.0,
-            },
-        'opacity': {
-            'color': (1.0, 1.0, 1.0),
-            'transparency': (0.0, 0.0, 0.0),
-            },
-        'bump': {
-            'map': None,
-            'height': 0.01,
-            'type': 0, # 0: Bump, 1: Tangent Space Normal, 2: Object Space Normal
-            },
-
-        'displacement': {
-            'map': None,
-            'scale': 1.0,
-        },
-        'textures': {}
-    }
-
-    def texture(self):
-        return {
-            'name':'',
-            'filepath':'',
-            'alphaIsLuminance':False,
-            'colorSpace':'sRGB',
-            'outColor': True,
-            'uvScale':(1.0, 1.0),
-            'uvOffset': (0.0,0.0),
-            'uvRotate': 0.0,
-        }
-        
-class Material(Asset):
-    def __init__(self, path='', **kwargs):
-        kwargs['format'] = 'mat'
-        Asset.__init__(self, path, **kwargs)
-
-        self.matdata = {}
+        self.matdata[material]['abstract'][grp][attr] = texdata
+        for key,val in kwargs.items():
+            # Set other grp value
+            if key in self.matdata[material]['abstract'][grp].keys():
+                self.matdata[material]['abstract'][grp][key] = val
+            # set other texture value
+            if key in self.matdata[material]['abstract'][grp][attr].keys():
+                self.matdata[material]['abstract'][grp][attr][key] = val
 
     def GetTypes(self, prefix):
-        return [ m.replace(prefix+'_', '') for m in dir(self) if callable(getattr(self, m)) and m.startswith(prefix+'_') ]
-    
+        types = []
+        for m in dir(self):
+            if callable(getattr(self, m)) and m.startswith(prefix+'_'):
+                types.append( m.replace(prefix+'_', '') )
+        return types
+
     def GetTable(self, ttype, prefix):
         if ttype not in self.GetTypes(prefix):
-            raise Exception('table not found: {}'.format(ttype))
+            raise Exception('Table not found: '+ttype)
         return getattr(self, prefix+'_'+ttype)()
 
     def GetMaterialTypes(self):
         return self.GetTypes('mat')
-
-    def GetConvertTable(self, src, dest, prefix='mat'):
-        data = self.abstract()
-        stable = self.GetTable(src, prefix)
-        dtable = self.GetTable(dest, prefix)
-
-        for grp in data.keys():
-            for key, val in data[grp].items():
-                sval = None
-                if grp in stable.keys() and key in stable[grp].keys():
-                    sval = stable[grp][key]
-                
-                dval = None
-                if grp in dtable.keys() and key in dtable[grp].keys():
-                    dval = dtable[grp][key]
-                    
-                data[grp][key] = { 'src': sval, 'dest':dval }
-            
-        return data
-
-    def GetMaterialConvertTable(self, src, dest):
-        return self.GetConvertTable(src, dest, prefix='mat')
-
+    
     def GetMaterialTable(self, mattype):
         return self.GetTable(mattype, 'mat')
 
-    def GetUtilityTypes(self):
-        return self.GetTypes('util')
-
-    def GetUtilityTable(self, utiltype):
-        return self.GetTable(utiltype, 'util')
-
-    def GetAbstract(self, name):
-        if not hasattr(self, name):
-            raise Exception('{} not defined.'.format(name))
-        return getattr(self, name)()
-    
-    def GetMaterial(self, name=None):
-        if not name:
-            name = self.GetName()
-
-        if name not in self.matdata.keys():
-            self.matdata[name] = {'abstract':self.abstract()}
-
-        return self.matdata[name]
-
-    def AddMaterial(self, name=None):
-        if not name:
-            name = self.GetName()
-        if name not in self.matdata.keys():
-            self.matdata[name] = {'abstract': self.abstract()}
-
-    def AddTexture(self, filepath, path, material=None, **kwargs):
-        if not material:
-            material = self.GetName()
-
-        if not self.matdata or material not in self.matdata.keys():
-            self.AddMaterial(material)
-
-        filepath = Path(filepath)
-
-        path = Path(path)
-        if len(path.segments) != 2:
-            raise Exception('Invalid texture destination: '+path.AsString())
-        grp,key = path.segments
-
-        texdata = self.texture()
-        texdata['name'] =  filepath.GetName()
-        texdata['filepath'] = filepath.AsString()
-        
-        self.matdata[material]['abstract'][grp][key] = {'texture':texdata, 'value':(0,0,0)}
-        for key,val in kwargs.items():
-            if key in self.matdata[material]['abstract'][grp].keys():
-                self.matdata[material]['abstract'][grp][key] = val
-
-    def abstract(self):
+    @staticmethod
+    def abstract():
         return {
         'diffuse': {
             'color': (1.0, 1.0, 1.0),
@@ -1764,10 +1633,10 @@ class Material(Asset):
             'map': None,
             'scale': 1.0,
         },
-        'textures': {}
     }
 
-    def texture(self):
+    @staticmethod
+    def texture():
         return {
             'name':'',
             'filepath':'',
@@ -1777,10 +1646,8 @@ class Material(Asset):
             'uvScale':(1.0, 1.0),
             'uvOffset': (0.0,0.0),
             'uvRotate': 0.0,
-            'colorCorrect': self.colorCorrect(),
         }
-        
-    def colorCorrect(self):
+
         return {
             'saturation':1.0,
             'contrast': 1.0,

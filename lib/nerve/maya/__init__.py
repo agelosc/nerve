@@ -1,4 +1,5 @@
 import os, sys, json
+from re import L
 import logging
 from functools import partial
 
@@ -178,11 +179,20 @@ class Node:
             cmds.connectAttr(placement + '.outUvFilterSize', tex + '.uvFilterSize', f=True)
 
     @staticmethod
-    def listHistory(plug, nodeType, **kwargs):
+    def listHistoryOLD(plug, nodeType, **kwargs):
         history = cmds.listHistory(plug, **kwargs)
         for h in history:
             if cmds.nodeType(h) == nodeType:
                 return h
+        return False
+
+    @staticmethod
+    def findHistory(plug, nodeType):
+        con = cmds.listConnections(plug, s=True, d=False) or []
+        for c in con:
+            if cmds.nodeType(c) == nodeType:
+                return c
+            return Node.findHistory(c, nodeType)
         return False
 
     @staticmethod
@@ -259,7 +269,6 @@ class Node:
     @staticmethod
     def GetAttrData(node, attr):
         plug = node+'.'+attr
-        
         atype = cmds.getAttr(plug, type=True)
 
         data = {}
@@ -315,12 +324,14 @@ class Node:
             data['type'] = 'enum'
             return data
 
-        if atype == 'string':
+        if atype in ['string']:
             data['value'] = cmds.getAttr(plug) or ''
             data['default'] = cmds.attributeQuery(attr, n=node, listDefault=True) or ''
             data['type'] = 'string'
             return data
+
         
+        #print(plug, atype)
         raise Exception('attribute type not defined:'+ atype)
 
     @staticmethod
@@ -405,7 +416,9 @@ class Node:
         for attr,adata in data['attr'].items():
 
             if 'value' in adata.keys(): # Set Attr
-                Node.setAttr(data['name'], attr, adata['value'])
+                atype = cmds.getAttr(data['name'] + '.'+ attr, type=True)
+                if atype != 'Tdata':
+                    Node.setAttr(data['name'], attr, adata['value'])
 
             if 'node' in adata.keys(): # Connect Node
                 node = adata['node']
@@ -418,7 +431,8 @@ class Node:
         cmds.namespace(setNamespace=':')
         if clearNamespace:
             cmds.namespace(removeNamespace=ns, mergeNamespaceWithRoot=True, f=True)
-        return cmds.ls(sl=True)[0]
+        sel = cmds.ls(sl=True)
+        return sel
 
     @staticmethod
     def create(ntype, name=None):
@@ -1217,299 +1231,7 @@ class USD(USDBase):
         self.type = 'USD'
         USDBase.__init__(self, path, **kwargs)
 
-class MaterialNEW(nerve.Material, Base):
-    def __init__(self, path='', **kwargs):
-        nerve.Material.__init__(self, path, **kwargs)
-        #self.AddReleaseMethod('Export')
-        #self.AddGatherMethod('Import')
-
-class Material(nerve.Material, Base):
-    def __init__(self, path='', **kwargs):
-        nerve.Material.__init__(self, path, **kwargs)
-        self.SetExtension('json')
-
-        self.AddReleaseMethod('Export')
-        self.AddGatherMethod('Import')
-
-    def SetAbstractData(self, node, attr, data):
-        if isinstance(data, dict): # Has Texture
-            #Node.setAttr( node, attr, data['value'])
-            tex = self.SetTextureData( data['texture'] )
-            atype = cmds.getAttr(node+'.'+attr, type=True)
-            if atype == 'float3':
-                cmds.connectAttr( tex + '.outColor', node+'.'+attr, f=True)
-            if atype == 'float':
-                cmds.connectAttr( tex + '.outAlpha', node+'.'+attr, f=True)
-        else: # Does not have texture
-            val = data
-            if val is None:
-                return False
-            Node.setAttr( node, attr, val )
-
-    def ConvertFromAbstract(self, material, data):
-        mattype = cmds.nodeType(material)
-
-        table = self.GetMaterialTable( mattype )
-        for grp in table.keys(): # grp: diffuse, reflection, refraction etc
-            for key, attr in table[grp].items(): # key: abstract attr name, attr: concrete attr name
-                if isinstance(attr, list): # Has Search Node
-                    if grp == 'displacement':
-                        cdata = attr[0]
-                        if 'node' not in data[grp].keys() and self.HasDisplacement(data):
-                            data[grp]['node'] = Node.create( cdata['type'] )
-                            data[grp]['plug'] = cdata['plug']
-
-                        utable = self.GetUtilityTable( cdata['type'] )
-                        for ukey, uattr in utable[grp].items():
-                            if self.HasDisplacement(data):
-                                self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
-                    else:
-                        cdata = attr[0]
-                        if 'node' not in data[grp].keys() and self.HasBump(data):
-                            data[grp]['node'] = Node.create( cdata['type'] )
-                        utable = self.GetUtilityTable( cdata['type'] )
-                        for ukey, uattr in utable[grp].items():
-                            if self.HasBump(data):
-                                self.SetAbstractData(data[grp]['node'], uattr, data[grp][ukey] )
-                        if all(x in cdata for x in ['attr', 'plug']):
-                            if self.HasBump(data):
-                                Node.connectAttr(data[grp]['node'], cdata['plug'], material, cdata['attr'])
-                else: # Doesn't have search node
-                    attrtable = {}
-                    if isinstance(attr, dict):
-                        attrtable = attr['table']
-                        attr = attr['attr']
-
-                    if grp == 'opacity':
-                        if 'transparency' in table[grp][key].lower(): # Invert
-                            
-                            if isinstance(data[grp][key], (tuple, list)):
-                                data[grp][key] = (1-data[grp][key][0], 1-data[grp][key][1], 1-data[grp][key][2])
-                            else:
-                                data[grp][key] = 1-data[grp][key]
-                    self.SetAbstractData(material, attr, data[grp][key])
-
-    def GetTextureColorCorrectData(self, node, cc):
-        ntype = cmds.nodeType(node)
-        if ntype == 'setRange':
-            inmin = cmds.getAttr(node+'.oldMin')[0]
-            inmax = cmds.getAttr(node+'.oldMax')[0]
-            outmin = cmds.getAttr(node+'.min')[0]
-            outmax = cmds.getAttr(node+'.max')[0]
-
-            cc['range'] = (inmin[0], inmax[0], outmin[0], outmax[0])
-        return cc
-
-    def SetTextureData(self, data):
-        tex = Node.create('file', data['name'])
-        uv = cmds.listConnections(tex + '.uv')[0]
-
-        Node.setAttr(tex, 'fileTextureName', data['filepath'])
-        Node.setAttr(tex, 'colorSpace', data['colorSpace'])
-        Node.setAttr(tex, 'alphaIsLuminance', data['alphaIsLuminance'])
-        Node.setAttr(uv, 'repeatU', data['uvScale'][0])
-        Node.setAttr(uv, 'repeatV', data['uvScale'][1])
-        Node.setAttr(uv, 'offsetU', data['uvOffset'][0])
-        Node.setAttr(uv, 'offsetV', data['uvOffset'][1])
-        Node.setAttr(uv, 'rotateUV', data['uvRotate'])
-
-        return tex
-        
-    def GetTextureData(self, node, attr, data=None):
-        if not data:
-            data = self.texture()
-
-        plug = node+'.'+attr
-        con = cmds.listConnections(plug)
-        if not con: # texture not found, return empty
-            return {}
-
-        con = con[0]
-        contype = cmds.nodeType(con)
-        if contype == 'file': # Texture found, return data
-            data['name'] = Node.CleanName(con)
-            data['filepath'] = cmds.getAttr(con + '.fileTextureName')
-            data['colorSpace'] = cmds.getAttr(con + '.colorSpace')
-            data['alphaIsLuminance'] = cmds.getAttr(con + '.alphaIsLuminance')
-            # UV
-            uvNode = cmds.listConnections(con + '.uv', type='place2dTexture')
-            if uvNode:
-                data['uvScale'] = (cmds.getAttr(uvNode[0] + '.repeatU'), cmds.getAttr(uvNode[0] + '.repeatV'))
-                data['uvOffset'] = (cmds.getAttr(uvNode[0] + '.offsetU'), cmds.getAttr(uvNode[0] + '.offsetV'))
-                data['uvRotate'] = cmds.getAttr(uvNode[0] + '.rotateUV')
-
-            # Color Correct
-            gain = Node.getAttr(con, 'colorGain')
-            offset = Node.getAttr(con, 'colorOffset')
-            
-            data['colorCorrect']['gain']*=gain[0]
-            data['colorCorrect']['offset']+=offset[0]
-            return data
-
-        # Color Correct
-        data['colorCorrect'] = self.GetTextureColorCorrectData( con, data['colorCorrect'])
-        
-        # Next Node
-        nextPlug = cmds.listConnections(con, connections=True, source=True, destination=False, plugs=True)
-        if not nextPlug: # texture not found, reset al data
-            return {}        
-        nextCon = nextPlug[0].split('.')[0]
-        nextAttr = nextPlug[0].split('.')[-1]
-
-        return self.GetTextureData(nextCon, nextAttr, data)
-
-    def HasDisplacement(self, data):
-        if 'displacement' in data.keys():
-            if 'map' in data['displacement'].keys():
-                if isinstance(data['displacement']['map'], dict):
-                    if data['displacement']['map']['texture']:
-                        return True
-        return False
-    
-    def HasBump(self, data):
-        if 'bump' in data.keys():
-            if 'map' in data['bump'].keys():
-                if isinstance(data['bump']['map'], dict):
-                    if data['bump']['map']['texture']:
-                        return True
-        return False    
-    
-    def GetDisplacement(self, data):
-        return data['displacement']['map']['node']
-
-    def GetAbstractData(self, node, table, data={}):
-        for grp in table.keys(): # grp: diffuse, reflection, bump etc...
-            if grp not in data.keys():
-                data[grp] = {}
-
-            for abst, conc in table[grp].items(): # abstract/concrete attribute names
-                if isinstance(conc, list): # if concrete attr is list search for nodes
-                    for cdata in conc: # for each attribute in list
-                        searchnode = node # store search node
-                        if grp == 'displacement': # for displacement, search node is ShadingEngine
-                            con = cmds.listConnections(node, type='shadingEngine')
-                            if not con: # shading engine not found
-                                continue
-                            searchnode = con[0]
-                        if 'attr' in cdata.keys(): # search node.attribute
-                            searchnode+='.'+cdata['attr']
-
-                        if cdata['type'] not in self.GetUtilityTypes():
-                            continue
-                        history = Node.listHistory(searchnode, cdata['type']) # Get search node history for node
-                        if not history:
-                            continue
-
-                        ctable = self.GetUtilityTable(cdata['type']) # get utility node table
-                        self.GetAbstractData( history, ctable, data ) # set data from utility node
-                else: # concrete attribute should exist on node
-                    attrtable = {}
-                    if isinstance(conc, dict):
-                        attrtable = {value:key for key, value in conc['table'].items()}
-                        conc = conc['attr']
-
-                    attrdata = Node.GetAttrData(node, conc)
-                    if grp == 'opacity':
-                        if 'transparency' in conc.lower():
-                            if attrdata['type'] == 'vector':
-                                attrdata['value'] = (1-attrdata['value'][0], 1-attrdata['value'][1], 1-attrdata['value'][2])
-                            else:
-                                attrdata['value'] = 1 - attrdata['value']
-
-
-                    if attrdata['value'] in attrtable.keys():
-                        attrdata['value'] = attrtable[attrdata['value']]
-                    data[grp][abst] = attrdata['value']
-                    if 'node' in attrdata.keys():
-                        data[grp][abst] = {}
-                        data[grp][abst]['value'] = attrdata['value']
-                        data[grp][abst]['texture'] = self.GetTextureData( node, conc )
-        return data
-    
-    def ConvertToAbstract(self, material):
-        mattype = cmds.nodeType(material)
-        if mattype not in self.GetMaterialTypes():
-            return {}
-        
-        data = self.abstract()
-        table = self.GetMaterialTable( mattype ) # Convertion data
-        self.GetAbstractData( material, table, data)
-
-        return data
-
-    def Export(self, concrete=True, abstract=True):
-        sel = cmds.ls(sl=True, l=True)
-        if len(sel):
-            materials = Node.GetMaterials( sel )
-            for material in materials:
-                self.matdata[material] = {}
-                self.matdata[material]['name'] = Node.CleanName(material)
-                self.matdata[material]['type'] = cmds.nodeType(material)
-                self.matdata[material]['sets'] = Node.GetShadingEngines(material)
-                self.matdata[material]['app'] = 'maya'
-                # Concrete
-                if concrete:
-                    self.matdata[material]['concrete'] = Node(material).Serialize()
-                # Abstract
-                if abstract and cmds.nodeType(material) in self.GetMaterialTypes():
-                    self.matdata[material]['abstract'] = self.ConvertToAbstract(material)
-
-        # Save File
-        datafile = self.GetFilePath('session')
-        if not datafile.GetParent().Exists():
-            datafile.GetParent().Create()
-
-        with open(datafile.AsString(), 'w') as outfile:
-            json.dump(self.matdata, outfile, indent=4)
-
-        self.Create()
-
-    def Import(self, shader='lambert'):
-        datafile = self.GetFilePath('session')
-        with open( datafile.AsString(), 'r') as infile:
-            indata = json.load( infile )
-
-        materials = []
-        for name, data in indata.items(): # material, material data
-            if 'concrete' in data.keys() and data['concrete']['type'] == shader:
-                material = Node(name).Unserialize(data['concrete'])
-                materials.append(material)
-                continue
-            
-            material = Node.create(shader, name=name)
-            materials.append(material)
-            self.ConvertFromAbstract(material, data['abstract'])
-        return materials
-    
-    def Convert(self, shader, remove=True):
-        sel = cmds.ls(sl=True, l=True)
-        if not len(sel):
-            cmds.warning('Nothing Selected.')
-            return False
-        
-        matlist = []
-        materials = Node.GetMaterials( sel )
-        for material in materials:
-            mattype = cmds.nodeType(material)
-            if mattype not in self.GetMaterialTypes():
-                continue
-            if shader == mattype:
-                continue
-
-            sgs = Node.GetShadingEngines(material)
-            data = self.ConvertToAbstract(material)
-
-            mat = Node.create(shader, name=material+'_'+shader)
-            matlist.append(mat)
-            self.ConvertFromAbstract(mat, data)
-
-            for sg in sgs:
-                cmds.connectAttr(mat + '.outColor', sg + '.surfaceShader', f=True)
-                if self.HasDisplacement(data):
-                   Node.connectAttr(data['displacement']['node'], data['displacement']['plug'], sg, 'displacementShader')
-
-        return matlist
-    
+class MaterialTables:
     def mat_RedshiftMaterial(self):
        return {
             'diffuse': {
@@ -1530,7 +1252,7 @@ class Material(nerve.Material, Base):
                 'metalness': 'refl_metalness',
                 'reflectivity': 'refl_reflectivity',
                 'ior': 'refl_ior',
-                'type': {'attr':'refl_fresnel_mode', 'table':{0:3, 1:2}}
+                'type': self.RedshiftReflectionType
                 },
             'refraction': {
                 'color': 'refr_color',
@@ -1577,11 +1299,13 @@ class Material(nerve.Material, Base):
                 'color': 'opacity_color',
                 },
             'bump': {
-                'map': [{'type':'RedshiftBumpMap', 'plug':'out', 'attr':'bump_input'}],
+                'map': self.RedshiftBump
+                #'map': [{'type':'RedshiftBumpMap', 'plug':'out', 'attr':'bump_input'}],
                 #'height': [{'type':'RedshiftBumpMap'}],
                 },
             'displacement': {
-                    'map': [{'type':'RedshiftDisplacement', 'plug':'out', 'attr':'displacementShader'}],
+                    'map': self.RedshiftDisplacement
+                    #'map': [{'type':'RedshiftDisplacement', 'plug':'out', 'attr':'displacementShader'}],
                     #'scale': [{'type':'bump2d', 'attr':'normalCamera'}],
                 },                
         }
@@ -1635,10 +1359,10 @@ class Material(nerve.Material, Base):
                 'color': 'opacity',
                 },
             'bump': {
-                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                'map': self.MayaBump,
                 },
             'displacement': {
-                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                    'map': self.MayaDisplacement,
                 },                                                                                      
         }
     def mat_usdPreviewSurface(self):
@@ -1661,7 +1385,15 @@ class Material(nerve.Material, Base):
                 },
             'opacity': {
                 'color': 'opacity',
-                },                                              
+                },
+            'bump': {
+                'map': 'normal',
+                'height': 'displacement',
+            },
+            'displacement':{
+                'map': self.MayaDisplacement
+            }
+
         }
     def mat_lambert(self):
         return {
@@ -1673,13 +1405,13 @@ class Material(nerve.Material, Base):
                 'color': 'incandescence',
                 }, 
             'opacity': {
-                'color': 'transparency',
+                'color': self.Transparency,
                 },  
             'bump': {
-                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                'map': self.MayaBump,
                 },
             'displacement': {
-                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                    'map': self.MayaDisplacement,
                 },
         }
     def mat_blinn(self):
@@ -1704,10 +1436,10 @@ class Material(nerve.Material, Base):
                 'color': 'transparency',
                 },
             'bump': {
-                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                'map': self.MayaBump,
                 },
             'displacement': {
-                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                    'map': self.MayaDisplacement,
                 },                                                               
         }
     def mat_phong(self):
@@ -1728,13 +1460,13 @@ class Material(nerve.Material, Base):
                 'color': 'incandescence',
                 },
             'opacity': {
-                'color': 'transparency',
+                'color': self.Transparency,
                 },
             'bump': {
-                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                'map': self.MayaBump,
                 },
             'displacement': {
-                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
+                    'map': self.MayaDisplacement,
                 },                                                                  
         }
     def mat_phongE(self):
@@ -1756,14 +1488,14 @@ class Material(nerve.Material, Base):
                 'color': 'incandescence',
                 },
             'opacity': {
-                'color': 'transparency',
+                'color': self.Transparency,
                 },
             'bump': {
-                'map': [{'type':'bump2d', 'plug':'outNormal', 'attr':'normalCamera'}],
+                'map': self.MayaBump,
                 },
             'displacement': {
-                    'map': [{'type':'displacementShader', 'plug':'displacement', 'attr':'displacementShader'}],
-                },                                                      
+                    'map': self.MayaDisplacement,
+                },
         }
     def mat_surfaceShader(self):
         return {
@@ -1771,39 +1503,377 @@ class Material(nerve.Material, Base):
                 'color':'outColor'
             },
             'opacity': {
-                'color': 'outTransparency',
-                },              
-        }
-
-    def util_bump2d(self):
-        return {
-            'bump': {
-                'map': 'bumpValue',
-                'height': 'bumpDepth',
-                'type': 'bumpInterp',
+                'color': self.OutTransparency,
+                },
+            'displacement':{
+                'map': self.MayaDisplacement,
             },
         }
-    def util_displacementShader(self):
-        return {
-            'displacement': {
-                'map': 'vectorDisplacement',
-                'scale': 'scale',
-            }
-        }
-    def util_RedshiftBumpMap(self):
-        return {
-            'bump': {
-                'map': 'input',
-                'height': 'scale',
-                'type': 'inputType',
-            }
 
-        }
-    def util_RedshiftDisplacement(self):
-        return {
-            'displacement': {
-                'map': 'texMap',
-                'scale': 'scale',
-            }
+    @staticmethod
+    def OutTransparency(abstract, grp, abst, conc, material, mode='set'):
+        if mode == 'set':
+            value = abstract[grp][abst]
+            if isinstance(value, dict):
+                tex = Material.GetTexture(value)
+                inv = Node.create('reverse')
+                Node.connectAttr(tex, 'outColor', inv, 'input')
+                Node.connectAttr(inv, 'output', material, 'outTransparency')
+            else:
+                value = (1-value[0], 1-value[1], 1-value[2])
+                Node.setAttr(material, 'outTransparency', value)
 
-        }        
+        if mode == 'get':
+            tex = Node.findHistory(material + '.outTransparency', 'file')
+            if tex:
+                abstract[grp][abst] = Material.SetMayaTexture(tex)
+            else:
+                value = Node.getAttr(material, 'outTransparency')
+                abstract[grp][abst] = (1-value[0], 1-value[1], 1-value[2])
+
+    @staticmethod
+    def Transparency(abstract, grp, abst, conc, material, mode='set'):
+        if mode == 'set':
+            value = abstract[grp][abst]
+            if isinstance(value, dict):
+                tex = Material.GetTexture(value)
+                inv = Node.create('reverse')
+                Node.connectAttr(tex, 'outColor', inv, 'input')
+                Node.connectAttr(inv, 'output', material, 'transparency')
+            else:
+                value = (1-value[0], 1-value[1], 1-value[2])
+                Node.setAttr(material, 'transparency', value)
+
+        if mode == 'get':
+            tex = Node.findHistory(material + '.transparency', 'file')
+            if tex:
+                abstract[grp][abst] = Material.SetMayaTexture(tex)
+            else:
+                value = Node.getAttr(material, 'transparency')
+                abstract[grp][abst] = (1-value[0], 1-value[1], 1-value[2])
+
+    @staticmethod
+    def MayaBump(abstract, grp, abst, conc, material, mode='set'):
+        if mode == 'set':
+            value = abstract[grp][abst]
+            if isinstance(value, dict):
+                bump = Node.create('bump2d', value['name'] + '_bump')
+                tex = Material.GetTexture(value)
+                Node.connectAttr(tex, 'outAlpha', bump, 'bumpValue')
+               #Node.setAttr(tex, 'alphaIsLuminance', True)
+                Node.connectAttr(bump, 'outNormal', material, 'normalCamera')
+
+                Node.setAttr( bump, 'bumpDepth', abstract[grp]['height'])
+                Node.setAttr( bump, 'bumpInterp', abstract[grp]['type'])
+        if mode == 'get':
+            bump = Node.findHistory(material + '.normalCamera', 'bump2d')
+            if bump:
+                tex = Node.findHistory(material + '.normalCamera', 'file')
+                abstract[grp]['height'] = Node.getAttr(bump, 'bumpDepth')
+                abstract[grp]['type'] = Node.getAttr(bump, 'bumpInterp')
+                if tex:
+                    abstract[grp][abst] = Material.SetMayaTexture(tex)
+
+    @staticmethod
+    def MayaDisplacement(abstract, grp, abst, conc, material, mode='set'):
+        if mode == 'set':
+            value = abstract[grp][abst]
+            if isinstance(value, dict):
+                sg = cmds.listConnections(material + '.outColor', type='shadingEngine')
+                if not sg:
+                    sg = Node.create('shadingEngine', name=material+'_SG')
+                    Node.connectAttr(material, 'outColor', sg, 'surfaceShader')
+                else:
+                    sg = sg[0]
+                disp = Node.create('displacementShader', name=material+'_disp')
+                tex = Material.GetTexture(value)                
+                Node.connectAttr(disp, 'displacement', sg, 'displacementShader')
+                Node.connectAttr(tex, 'outColor', disp, 'vectorDisplacement')
+
+                Node.setAttr(disp, 'displacement', abstract[grp]['scale'])
+        if mode == 'get':
+            sg = cmds.listConnections(material+'.outColor', type='shadingEngine')
+            if sg:
+                sg = sg[0]
+                disp = cmds.listConnections(sg + '.displacementShader', type='displacementShader')
+                if disp:
+                    disp = disp[0]
+                    abstract[grp]['scale'] = Node.getAttr(disp, 'displacement')
+                    tex = Node.findHistory(disp + '.vectorDisplacement', 'file')
+                    if tex:
+                        abstract[grp]['map'] = Material.SetMayaTexture(tex)
+                    
+    @staticmethod
+    def RedshiftDisplacement(abstract, grp, abst, conc, material, mode='set'):
+        value = abstract[grp][abst]
+
+        if mode == 'set':
+            if isinstance(value, dict):
+                sg = cmds.listConnections(material + '.outColor', type='shadingEngine')
+                if not sg:
+                    sg = Node.create('shadingEngine', name=material+'_SG')
+                    Node.connectAttr(material, 'outColor', sg, 'surfaceShader')
+                else:
+                    sg = sg[0]                
+                disp = Node.create('RedshiftDisplacement')
+                tex = Material.GetTexture(value)
+                Node.connectAttr(disp, 'out', sg, 'displacementShader')
+                Node.connectAttr(tex, 'outColor', disp, 'texMap')
+
+                Node.setAttr(disp, 'scale', abstract[grp]['scale'])
+
+        if mode == 'get':
+            sg = cmds.listConnections(material + '.outColor', type='shadingEngine')
+            if sg:
+                sg = sg[0]
+                disp = cmds.listConnections(sg + '.displacementShader', type='RedshiftDisplacement')
+                if disp:
+                    disp = disp[0]
+                    abstract[grp]['scale'] = Node.getAttr(disp, 'scale')
+                    tex = Node.findHistory(disp + '.texMap', 'file')
+                    if tex:
+                        abstract[grp]['map'] = Material.SetMayaTexture(tex)
+    
+    @staticmethod
+    def RedshiftBump(abstract, grp, abst, conc, material, mode='set'):
+        value = abstract[grp][abst]
+        if mode == 'set':
+            if isinstance(value, dict):
+                bump = Node.create('RedshiftBumpMap', value['name'] + '_bump' )
+                tex = Material.GetTexture(value)
+                Node.connectAttr(tex, 'outColor', bump, 'input')
+                Node.connectAttr(bump, 'out', material, 'bump_input')
+
+                Node.setAttr(bump, 'scale', abstract[grp]['height'])
+                Node.setAttr(bump, 'inputType', abstract[grp]['type'] )
+
+        if mode == 'get':
+            bump = Node.findHistory(material + '.bump_input', 'RedshiftBumpMap')
+            if bump:
+                tex = Node.findHistory(material + '.bump_input', 'file')
+                abstract[grp]['height'] = Node.getAttr(bump, 'scale')
+                abstract[grp]['type'] = Node.getAttr(bump,'inputType')
+                if tex:
+                    abstract[grp][abst] =  Material.SetMayaTexture(tex)
+
+            normal = Node.findHistory(material + '.bump_input', 'RedshiftNormalMap')
+            if normal:
+                abstract[grp]['height'] = Node.getAttr(normal, 'scale')
+                abstract[grp]['type'] = 1
+                texdata = Material.texture()
+                texdata['name'] = normal
+                texdata['filepath'] = Node.getAttr(normal, 'tex0')
+                texdata['colorSpace'] = 'Raw'
+                uv = cmds.listConnections(normal + '.uvCoord', type='place2dTexture')
+                if uv:
+                    texdata['uvScale'] = (Node.getAttr(uv, 'repeatU'), Node.getAttr(uv, 'repeatV'))
+                    texdata['uvOffset'] = (Node.getAttr(uv, 'offsetU'), Node.getAttr(uv, 'offsetV'))
+                    texdata['uvRotate'] = Node.getAttr(uv, 'rotateUV')     
+                else:
+                    texdata['uvScale'] = (Node.getAttr(normal, 'repeats0'), Node.getAttr(normal, 'repeats1'))
+
+    @staticmethod
+    def RedshiftReflectionType(abstract, grp, abst, conc, material, mode='set'):
+        # types: 0=IOR, 1=metalness
+        if mode == 'set':
+            if abstract[grp][abst] == 0:
+                Node.setAttr(material, 'refl_fresnel_mode', 3)
+                return True
+            if abstract[grp][abst] == 1:
+                Node.setAttr(material, 'refl_fresnel_mode', 2)
+                return True
+        if mode == 'get':
+            if Node.getAttr(material, 'refl_fresnel_mode') == 3:
+                abstract[grp][abst] = 0
+                return True
+            if Node.getAttr(material, 'refl_fresnel_mode') == 2:
+                abstract[grp][abst] = 1
+                return True
+
+class Material(nerve.Material, Base, MaterialTables):
+    def __init__(self, path='', **kwargs):
+        nerve.Material.__init__(self, path, **kwargs)
+        self.AddReleaseMethod('Export')
+        self.AddGatherMethod('Import')
+    
+    @staticmethod
+    def GetTexture(texdata, grp=''):
+        tex = Node.create('file', texdata['name'])
+        uv = cmds.listConnections(tex + '.uv')[0]
+
+        Node.setAttr(tex, 'fileTextureName', texdata['filepath'])
+        Node.setAttr(tex, 'colorSpace', texdata['colorSpace'])
+        Node.setAttr(tex, 'alphaIsLuminance', texdata['alphaIsLuminance'])
+
+        Node.setAttr(uv, 'repeatU', texdata['uvScale'][0])
+        Node.setAttr(uv, 'repeatV', texdata['uvScale'][1])
+        Node.setAttr(uv, 'offsetU', texdata['uvOffset'][0])
+        Node.setAttr(uv, 'offsetV', texdata['uvOffset'][1])
+        Node.setAttr(uv, 'rotateUV', texdata['uvRotate'])
+
+        return tex
+
+    @staticmethod
+    def SetMayaTexture(node):
+        texdata = Material.texture()
+        texdata['name'] = node
+        texdata['filepath'] = Node.getAttr(node, 'fileTextureName')
+        texdata['colorSpace'] = Node.getAttr(node, 'colorSpace')
+        texdata['alphaIsLuminance'] = Node.getAttr(node, 'alphaIsLuminance')
+        uv = cmds.listConnections(node + '.uv', type='place2dTextyre')
+        if uv:
+            texdata['uvScale'] = (Node.getAttr(uv, 'repeatU'), Node.getAttr(uv, 'repeatV'))
+            texdata['uvOffset'] = (Node.getAttr(uv, 'offsetU'), Node.getAttr(uv, 'offsetV'))
+            texdata['uvRotate'] = Node.getAttr(uv, 'rotateUV')
+
+        return texdata
+    
+    def GetAbstract(self, shader='RedshiftMaterial', name=None):
+        if not name:
+            name = self.GetName()
+        if name not in self.matdata.keys():
+            self.SetMaterial(name)
+
+        abstract = self.matdata[name]['abstract']
+
+        material = Node.create(shader, name=name)
+        table = self.GetMaterialTable( shader )
+        for grp in table.keys():
+            for abst, conc in table[grp].items():
+                if callable( conc ): # Callable
+                    conc(abstract, grp, abst, conc, material, mode='set')
+                else: # Standard
+                    value = abstract[grp][abst]
+                    attrdata = Node.GetAttrData( material, conc )
+                    if isinstance( value, dict): # Texture
+                        tex = Material.GetTexture(value)
+                        if attrdata['type'] == 'vector':
+                            Node.connectAttr(tex, 'outColor', material, conc)
+                        if attrdata['type'] == 'float':
+                            Node.connectAttr(tex, 'outAlpha', material, conc)
+                    else:
+                        Node.setAttr(material, conc, value)
+        
+        sg = cmds.listConnections(material + '.outColor', type='shadingEngine')
+        if not sg:
+            sg = Node.create('shadingEngine', material + '_SG')
+            Node.connectAttr(material, 'outColor', sg, 'surfaceShader')
+        return material
+
+    def SetAbstract(self, material):
+        if material not in self.matdata.keys():
+            self.SetMaterial(material)
+        
+        abstract = self.matdata[material]['abstract']
+        table = self.GetMaterialTable( cmds.nodeType(material) )
+        for grp in table.keys():
+            for abst, conc in table[grp].items():
+                if callable( conc ): # Callable
+                    conc(abstract, grp, abst, conc, material, mode='get')
+                else:
+                    attrdata = Node.GetAttrData(material, conc)
+                    #if isinstance(abstract[grp][abst], tuple) and isinstance(attrdata['value'], float):
+                        #attrdata['value'] = (attrdata['value'], attrdata['value'], attrdata['value'])
+
+                    abstract[grp][abst] = attrdata['value']
+                    if 'node' in attrdata.keys():
+                        tex = Node.findHistory(material+'.'+conc, 'file')
+                        if tex:
+                           abstract[grp][abst] = self.SetMayaTexture(tex)
+
+    def SetConcrete(self, material):
+        if material not in self.matdata.keys():
+            self.SetMaterial( material )
+        node = cmds.listConnections(material+'.outColor', type='shadingEngine')
+        if node:
+            node = node[0]            
+        else:
+            node = material
+        
+        self.matdata[material]['concrete'] = Node(node).Serialize()
+        
+    def GetConcrete(self, material):
+        material = Node(material).Unserialize(self.matdata[material]['concrete'])
+
+    def Convert(self, shader):
+        sel = cmds.ls(sl=True)
+        if not len(sel):
+            cmds.warning('Nothing selected')
+            return False
+
+        matlist = []
+        materials = Node.GetMaterials( sel )
+        for material in materials:
+            mattype = cmds.nodeType(material)
+            if mattype not in self.GetMaterialTypes():
+                continue
+            if shader == mattype:
+                continue
+
+            self.SetAbstract(material)
+            mat = self.GetAbstract(shader, material)
+            matlist.append(mat)
+
+        return matlist
+
+    def ExportTextures(self):
+        for material in self.matdata.keys():
+            abstract = self.matdata[material]['abstract']
+            concrete = self.matdata[material]['concrete'] if 'concrete' in self.matdata[material].keys() else None
+            for grp in abstract.keys():
+                for key, value in abstract[grp].items():
+                    if isinstance(value, dict):
+                        filepath = nerve.Path(value['filepath'])
+                        newpath = self.GetFilePath('textures') + (material+'_'+filepath.GetHead())
+                        if newpath == filepath:
+                            continue
+                        if newpath.Exists():
+                            cmds.warning('Texture already exists. Skipping texture export {}'.format(newpath))
+                            continue
+
+                        filepath.Copy( newpath )
+                        print('Copying texture to {}'.format(newpath))
+                        name = value['name']
+                        # Abstract Repath
+                        value['filepath'] = newpath.AsString()
+                        # Concrete Repath
+                        if concrete and name in concrete['history'].keys():
+                            concrete['history'][name]['attr']['fileTextureName']['value'] = newpath.AsString()
+
+    def Export(self, textures=True):
+        sel = cmds.ls(sl=True, l=True)
+        if len(sel):
+            materials = Node.GetMaterials( sel )
+            for material in materials:
+                self.SetMaterial(material)
+                self.SetAbstract(material)
+                self.SetConcrete(material)
+        
+        if textures:
+            self.ExportTextures()
+
+        datafile = self.GetFilePath('session')
+        if not datafile.GetParent().Exists():
+            datafile.GetParent().Create()
+        
+        with open(datafile.AsString(), 'w') as outfile:
+            json.dump(self.matdata, outfile, indent=4)
+
+        self.Create()
+
+    def Import(self, shader='RedshiftMaterial'):
+        datafile = self.GetFilePath('session')
+        with open(datafile.AsString(), 'r') as infile:
+            indata = json.load(infile)
+
+        materials = []
+        for name, data in indata.items():
+            if 'concrete' in data.keys() and data['concrete']['type'] == shader:
+                material = self.GetConcrete(name)
+                materials.append( material )
+                continue
+                
+            material = self.GetAbstract(shader)
+            materials.append( material )
+
+        return materials

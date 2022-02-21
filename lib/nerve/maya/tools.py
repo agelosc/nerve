@@ -411,8 +411,10 @@ def rsConvertOpacityToSprite():
         if 'node' not in attrdata.keys():
             continue
         tex = nerve.maya.Node.listHistory( mat+'.opacity_color', 'file')
+        tex = cmds.listConnections(mat + '.opacity_color')
         if not tex:
             continue
+        tex = tex[0]
         
         sprite = nerve.maya.Node.create('RedshiftSprite')
         nerve.maya.Node.setAttr(sprite, 'tex0', cmds.getAttr(tex + '.fileTextureName'))
