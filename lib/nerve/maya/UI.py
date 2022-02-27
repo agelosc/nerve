@@ -80,7 +80,7 @@ class Menu:
             cmds.menuItem(subMenu=False, label=label, parent=self.ctrl['jobs'], command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()) )
 
         cmds.menuItem(divider=True, parent=self.ctrl['jobs'])
-        cmds.menuItem(subMenu=False, label='Add...', parent=self.ctrl['jobs'], command=self.JobAdd)
+        #cmds.menuItem(subMenu=False, label='Add...', parent=self.ctrl['jobs'], command=self.JobAdd)
         cmds.menuItem(subMenu=False, label='Create...', parent=self.ctrl['jobs'], command=self.JobCreate)
 
         # Explore

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block sidebar %}
+<ul>
+    <li class="">
+        <a href="assets/?job={{job}}"><span style='font-weight: bold;'>Assets</span></a>
+    </li>
+    <li class="">
+        <a href="dailies/?job={{job}}"><span>Dailies</span></a>
+    </li>
+    <li class="">
+        <a href="dailies/?job={{job}}"><span>Sequences</span></a>
+    </li>    
+</ul>    
+{% endblock sidebar%}
+
+{% block content %}
+    {% csrf_token %}
+    <div class="container">
+        <!-- Selected Asset -->
+        {% if not asset.isGroup %}
+            {% include "asset.html" %}
+        {% endif %}
+
+        {% for asset in asset_list %}
+            {% if forloop.first %}<div class="row">{% endif %}
+            <div class="col-lg-4 nopadding">
+                <div class="box">
+                    <img class="cover img-fluid" src="{% if asset.hasCover %} /image/{{asset.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
+                    <div class="overlay">
+                        <div class="title">
+                            <a href="/assets/?job={{job.path}}&path={{asset.path}}" ><h1>{{ asset.name }}</h1></a>
+                        </div>
+                        <div class="apps">
+                            <!-- Import -->
+                            <a href="#" class="action"
+                                data-action="asset" data-job="{{job.path}}" data-path={{asset.path}} data-htmltarget="#asset"
+                                data-toggle="modal" data-target="#asset-view"
+                                >
+                               <i class="bi bi-boxes"></i>
+                            </a>                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% if forloop.counter|divisibleby:3 %}</div><div class="row">{% endif %}
+            {% if forloop.last %}</div>{% endif %}
+        {% endfor %}
+    </div>
+{% endblock content %}
+
+{% block modal %}
+    <!-- Edit Job -->
+    <div class="container-fluid">
+        <form method="post">
+        {% csrf_token %}
+        
+        <div class="modal fade" id="asset-view" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Asset</h5>
+                        <button type="button" class="btn-close modal-dismiss" data-dismiss="#asset-view" aria-label="Close"></button>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="asset">
+
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm modal-dismiss" data-dismiss="#asset-view">Close</button>
+                        <input type="submit" value='Submit' class="btn btn-primary btn-sm">
+                    </div>
+                </div>
+            </div>
+        </div>  
+        </form>
+    </div>
+{% endblock modal %}

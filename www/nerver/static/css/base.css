@@ -1,7 +1,11 @@
 body {  font-family: 'Roboto', sans-serif; height: 100%; }
 * {font-family: 'Open Sans', sans-serif; }
 a, a:hover, a:focus { text-decoration: none; }
-a, a:hover, a:focus { color: #aa2200; }
+a, a:hover, a:focus {color: #aa2200 }
+
+.btn-primary { background-color: #aa2200; border-color: #aa2200; } 
+.btn-primary:hover { background-color: #880000; } 
+.btn-primary:focus { background-color: #880000; } 
 
 hr {color: #000; }
 .nopadding {padding: 0px;}
@@ -15,21 +19,27 @@ hr {color: #000; }
 .sidebar ul li a:hover { background: #fff;}
 
 /*.sidebar {  border-right: 1px solid #e2e2e2; }*/
-.job { background-color: #eee; overflow:hidden; position:relative; }
-.job .cover {transition: all 0.3s ease; }
-.job:hover .cover { transform: scale(1.05); }
-.job .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%;}
-.job .title { position: relative; top: 50%; transform: translateY(-50%); text-align: center; }
-.job .title h1 { font-size: 1.8em; padding: 0px; margin: 0px; color: #fff; }
+.box { background-color: #eee; overflow:hidden; position:relative; }
+.box .cover {transition: all 0.3s ease; }
+.box:hover .cover { transform: scale(1.05); }
+.box .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%;}
+.box .title { position: relative; top: 50%; transform: translateY(-50%); text-align: center; }
+.box .title h1 { font-size: 1.8em; padding: 0px; margin: 0px; color: #fff; }
 
-.job:hover .apps { bottom: 0px;}
-.job .apps { transition: all 0.3s ease; padding: 15px; position: absolute; bottom: -64px; width:100%; height: 64px; }
-.job .apps a { padding: 0px 5px;}
-.job .apps img { transition: all 0.1s ease; }
-.job .apps img:hover { transform: scale(1.2); }
+.box:hover .apps { bottom: 0px; }
+.box .apps { transition: all 0.3s ease; padding: 15px; position: absolute; bottom: -64px; width:100%; height: 64px; }
+.box .apps a { padding: 0px 5px; }
+.box .apps .dropdown { display: inline; }
+.box .apps img { transition: all 0.1s ease; }
+.box .apps img:hover { transform: scale(1.2); }
+.box .apps a i { font-size:2em; }
 
-.job:hover .icons { top: 0px; }
-.job .icons { transition: all 0.3s ease; padding: 5px; position: absolute; top: -64px; width:100%; height: 64px; text-align: right;}
-.job .icons a { padding: 0px 5px;}
-.job .icons img { transition: all 0.1s ease; }
-.job .icons img:hover { transform: scale(1.2); }
+.box:hover .icons { top: 0px; }
+.box .icons { transition: all 0.3s ease; padding: 5px; position: absolute; top: -64px; width:100%; height: 64px; text-align: right;}
+.box .icons a { padding: 0px 5px;}
+.box .icons img { transition: all 0.1s ease; }
+.box .icons img:hover { transform: scale(1.2); }
+
+#tooltip { background-color: #333; color: white; padding:5px 10px; border-radius:4px; font-size: 13px; }
+
+.asset .input-group-prepend { min-width:20% }

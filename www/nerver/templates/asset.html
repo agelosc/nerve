@@ -1,0 +1,94 @@
+{% load static %}
+<div class="container-fluid nopadding asset">
+  <div class="row">
+    <div class="col-lg-4 nopadding">
+      <!-- BOX [ -->
+      <div class="box">
+        <img class="cover img-fluid" src="{% if asset.hasCover %} /image/{{asset.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
+        <div class="overlay">
+          <div class="title">
+            <a href="/assets/?job={{job.path}}&path={{asset.path}}" id="asset-url"><h1>{{ asset.name }}</h1></a>
+          </div>
+          <div class="apps">
+            <!-- Versions Dropdown [ -->
+            <div class="dropdown">
+              <button class="btn btn-primary dropdown-toggle" type="button" id="versions" data-toggle="dropdown">
+                {{ asset.versionAsString }}
+              </button>
+              <div class="dropdown-menu">
+                {% for version, versionstr in asset.versions.items %}
+                  <a class="dropdown-item" href="#" data-target="#versions" data-anchor="#asset-url" data-key="version" data-val={{version}}>{{versionstr}}</a>
+                {% endfor %}
+              </div>
+            </div>
+            <!-- Versions Dropdown ]-->
+
+            <!-- Format Dropdown [ -->
+            <div class="dropdown">
+              <button class="btn btn-primary dropdown-toggle" type="button" id="formats" data-toggle="dropdown">
+                {{ asset.formatlong }}
+              </button>
+              <div class="dropdown-menu">
+                {% for format, formatlong in asset.formats.items %}
+                  <a class="dropdown-item" href="#" data-target="#formats" data-anchor="#asset-url" data-key="format" data-val={{format}}>{{formatlong}}</a>
+                {% endfor %}
+              </div>
+            </div>
+            <!-- Format Dropdown ] -->
+
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- BOX ] -->
+    <!-- Details [ -->
+    <div class="col nopadding">
+      <!-- Description [-->
+      <form>
+      <div class="input-group mb-2">
+        <div class="input-group-prepend">
+          <span class="input-group-text">Job</span>
+        </div>
+        <input type="text" class="form-control" value="{{asset.job}}" readonly>
+      </div>        
+      <div class="input-group mb-2">
+        <div class="input-group-prepend">
+          <span class="input-group-text">Path</span>
+        </div>
+        <input type="text" class="form-control" value="{{asset.path}}" readonly>
+      </div>        
+      <div class="input-group mb-2">
+        <div class="input-group-prepend">
+          <span class="input-group-text">Description</span>
+        </div>
+        <input type="text" class="form-control" value="{{asset.description}}">
+      </div>
+
+      <div class="input-group mb-2">
+        <div class="input-group-prepend">
+          <span class="input-group-text">Date</span>
+        </div>
+        <input type="text" class="form-control" id="date" value="{{asset.date}}" readonly>
+      </div>
+      <div class="input-group mb-2">
+        <div class="input-group-prepend">
+          <span class="input-group-text">User</span>
+        </div>
+        <input type="text" class="form-control" id="user" value="{{asset.user}}" readonly>
+      </div>            
+      <div class="input-group">
+        <div class="input-group-prepend">
+          <span class="input-group-text" style="height: 100%">Comments</span>
+        </div>
+        <textarea class="form-control" id="comment" aria-label="With textarea">{{asset.comment}}</textarea>
+      </div>    
+    </form>       
+
+      <!-- Descriptioj ]-->
+
+
+
+    </div>
+    <!-- Details ] -->
+  </div>
+</div>

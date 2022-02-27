@@ -12,7 +12,6 @@ import nerve
 import nerve.apps
 
 class Action:
-        
     @staticmethod
     def App(request):
         if "ajax" not in request.POST.keys():
@@ -77,15 +76,82 @@ class Action:
         nerve.Job.RemoveFromRecents(path)
         return HttpResponse('Job removed from recents')
 
+    @staticmethod
+    def asset_modal(request):
+        job = request.POST['job']
+        path = request.POST['path']
+        asset = nerve.Asset(job=job, path=path)
+        return render(request, 'asset.html', {'asset':asset.Serialize(deep=True)})
+
+    @staticmethod
+    def asset(request):
+        args = request.POST.get('url')
+        asset = nerve.Asset.url( request.POST.get('url') )
+        return JsonResponse(asset.Serialize(deep=True))
+
+    @staticmethod
+    def load_app(request):
+        path = request.POST['path']
+        app = request.POST['app']
+
+        if app == 'explore':
+            subprocess.Popen( ['start', path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT , shell=True)
+            return HttpResponse('')
+
+        if hasattr(nerve.apps, app):
+            appobj = getattr(nerve.apps, app)(path).Load()
+            date = datetime.now().strftime('%a %d %b %y %H:%M:%S')
+            return HttpResponse('[{0}] Loading {1}...'.format(date, app))
+
+        return HttpResponse('')        
+
+
 class Job(View):
     def get(self, request, *args, **kwargs):
         job_list = []
         context = {'job_list': job_list}
         for recent in nerve.Job.GetRecent():
             Job = nerve.Job(recent)
-            job_list.append( Job.AsJson() )
+            job_list.append( Job.Serialize() )
         response = render(request, 'jobs.html', context)
         return response
+
+    def post(self, request, *args, **kwargs):
+        job = nerve.Job( request.POST.get('path') )
+        job.SetPrettyName( request.POST.get('name') )
+        return self.get(request)
+
+class Asset(View):
+    def get(self, request):
+        job = request.GET.get('job')
+        Job = nerve.Job(job)
+        if not Job.Exists():
+            context = {'msg': 'The job requested does not exist.'}
+            return render(request, '404.html', context, status=404)
+
+        context = {}
+        args = request.GET.dict()
+
+        args['version'] = request.GET.get('version')
+        if not args['version']:
+            args['version'] = -1
+
+        Asset = nerve.Asset( **args )
+
+        context['job'] = Job.Serialize()
+        context['asset'] = Asset.Serialize(deep=not Asset.IsGroup())
+        context['asset_list'] = []
+        for child in Asset.GetChildren():
+            args['path'] = Asset.GetPath() + child
+            Child = nerve.Asset( **args )
+            context['asset_list'].append( Child.Serialize() )
+
+        nerve.String.pprint(context)
+        response = render(request, 'assets.html', context)
+        return response
+
+def snippets(request):
+    return render(request, "snippets.html")
 
 def image(request, path):
     return FileResponse(open(path, 'rb'))
@@ -182,7 +248,6 @@ def assets(request):
         Child = nerve.Asset( **args )
         context['asset_list'].append( Child.JsonEncode()  )
 
-    nerve.String.pprint(context)
 
     return render(request, "assets.html", context)
 

@@ -5,6 +5,8 @@ sys.path.append( os.environ['NERVE_LOCAL_PATH'] + '/lib')
 import unittest
 import nerve
 
+SAMPLES = nerve.Path('$NERVE_LOCAL_PATH/test/testSamples/')
+
 class Utilities(unittest.TestCase):
 
     def testPath(self):
@@ -25,7 +27,13 @@ class Utilities(unittest.TestCase):
         self.assertEqual( path, '/A/B')
         self.assertNotEqual( path, '/C/D' )
         self.assertEqual( path + 'C', '/A/B/C')
+        self.assertEqual( path + 'C/D/E/F/G', '/A/B/C/D/E/F/G')
         self.assertEqual( path + '/C', '/A/B/C')
+        self.assertEqual( path + '/C/D/E/F/G', '/A/B/C/D/E/F/G')
+        path = nerve.Path('A/B')
+        self.assertEqual(path + 'C/D/E/F/G', 'A/B/C/D/E/F/G')
+        self.assertEqual(path + '/C/D/E/F/G', 'A/B/C/D/E/F/G')
+
 
         # Object passeed as argument that expexts string type
         path = nerve.Path('/A/B')
@@ -127,7 +135,16 @@ class Utilities(unittest.TestCase):
         self.assertFalse(files[0].Exists())
         self.assertFalse(files[1].Exists())
         self.assertFalse(files[2].Exists())
-    
+
+        path = nerve.Path('/A')
+        self.assertEqual( path.Trim(), nerve.Path('A') )
+        path = nerve.Path('/A/B')
+        self.assertEqual( path.Trim(), nerve.Path('A/B') )
+        path = nerve.Path('/A/B/C')
+        self.assertEqual( path.Trim(), nerve.Path('A/B/C') )        
+        path = nerve.Path('/A/B/C/D')
+        self.assertEqual( path.Trim(), nerve.Path('A/B/C/D') )                
+
     def testString(self):
         self.assertFalse(nerve.String.IllegalCharacters('abc'))
         self.assertTrue(nerve.String.IllegalCharacters('abc[]'))
@@ -175,6 +192,13 @@ class Utilities(unittest.TestCase):
 
 class Nerve(unittest.TestCase):
 
+    def NewJob(self):
+        job = nerve.Job()
+        if job.Exists():
+            job.Delete()
+        job.Create()
+        return job
+
     def testJob(self):
         # config default path
         job = nerve.Job()
@@ -190,6 +214,30 @@ class Nerve(unittest.TestCase):
 
         job = nerve.Job()
         self.assertEqual(job.GetDir(), path.AsString())
+
+    def testAsset(self):
+        job = self.NewJob()
+
+        
+        # Metadata
+        asset = nerve.Asset('metadata', version=1, description='Metadata', format='usd', comment="USD comment v001")
+        asset.Release(filepath=SAMPLES+'asset.usd')
+        asset = nerve.Asset('metadata', version=2, description='Metadata Latest', format='usd', comment="USD comment v002")
+        asset.Release(filepath=SAMPLES+'asset.usd')
+
+        asset = nerve.Asset('metadata', version=2, description='Metadata Latest', format='abc', comment="ABC comment v002")
+        asset.Release(filepath=SAMPLES+'asset.abc')
+        
+        # Format
+        asset = nerve.Asset('format', version=1)
+        #print(asset.GetFormat())
+
+        
+
+        
+if __name__ == '__main__':
+    unittest.main()
+
 
         
 

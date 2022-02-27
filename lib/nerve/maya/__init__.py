@@ -68,6 +68,10 @@ class Job(nerve.Job):
         return True
 
     def Create(self, addToRecents=True):
+        if self.Exists():
+            if addToRecents:
+                self.AddToRecent(self.GetDir())
+            return True
         # Create Job
         nerve.Job.Create(self)
         # Add To Recent Jobs

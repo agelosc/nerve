@@ -1,21 +1,19 @@
 {% extends "base.html" %}
 {% load static %}
 
-
 {% block sidebar %}
 
 <ul>
-    <li class="border-bottom"><strong>Jobs</strong></li>
-    <li><a href="#" class="action" data-action="job_create" data-reload="1"><i class="bi bi-plus-circle"></i></i> Create</a></li>
-    <li><a href="#" class="action" data-action="job_add" data-reload="1"><i class="bi bi-bookmark-plus"></i> Add</a></li>
-    <!--
-    <li class="border-bottom"><strong>Jobs</strong></li>
+    <li class="border-bottom">
+        <h2>
+            <strong>Jobs</strong>
+        </h2>
+    </li>
     {% for job in job_list %}
-        <li class="nav-item">
-            <a class="" href="">{{ job.name }}</a>
-        </li>
+        <li><a href="">{{job.pretty}}</a></li>
     {% endfor %}
-    -->
+    <li><a href="#" class="action border-top" data-action="job_create" data-reload="1"><i class="bi bi-plus-circle"></i> Create </a></li>
+    
 </ul>    
 {% endblock sidebar%}
 
@@ -27,29 +25,47 @@
             {% if forloop.first %}<div class="row">{% endif %}
 
             <div class="col-lg-4 nopadding">
-                <div class="job">
+                <div class="box">
                     <img class="cover img-fluid" src="{% if job.hasCover %} /image/{{job.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
                     <div class="overlay">
                         <div class="title">
-                            <a href="#"><h1>{{ job.pretty }}</h1></a>
+                            <a href="assets/?job={{job.path}}"><h1>{{ job.pretty }}</h1></a>
                         </div>
                         <div class="apps">
-							<!-- Explore -->
-							<a href="#" class="app" data-path="{{ job.path }}" data-app="explore" title="explore" data-toogle="tooltip">
-								<img src="{% static "img/explore-icon.png" %}" width="32" height="32" />
-							</a>
-							<!-- HOUDINI -->
-							<a href="#" class="app" data-path="{{ job.path }}" data-app="houdini" title="houdini" data-toggle="tooltip">
-								<img src="{% static "img/houdini_icon.png" %}" width="32" height="32" />
-							</a>
-							<!-- MAYA -->
-							<a href="#" class="app" data-path="{{ job.path }}" data-app="maya" title="maya" data-toggle="tooltip">
-								<img src="{% static "img/maya_icon.png" %}" width="32" height="32" />   
+                            <!-- Explore -->
+                            <a href="#" class="action"
+                                data-action='load_app' data-path="{{job.path}}" data-app="explore"
+                                title="explore" >
+                                <img src="{% static "img/explore-icon.png" %}" width="32" height="32" />
+                            </a>
+                            <!-- HOUDINI -->
+                            <a href="#" class="action"
+                                data-action="load_app" data-path="{{ job.path }}" data-app="houdini" 
+                                title="houdini" >
+                                <img src="{% static "img/houdini_icon.png" %}" width="32" height="32" />
+                            </a>
+                            <!-- MAYA -->
+                            <a href="#" class="action"
+                                data-action="load_app" data-path="{{ job.path }}" data-app="maya" title="maya">
+                                <img src="{% static "img/maya_icon.png" %}" width="32" height="32" />   
                             </a>                         
                         </div>
                         <div class="icons">
-                            <a href="#" class="action" data-action="job_remove" data-path="{{job.path}}" data-reload="1"><i class="bi bi-eye-slash-fill"></i></a>
+                            <a href="#" class="job-edit"
+                                data-toggle="tooltip" data-placement="bottom" title="edit" 
+                                data-toggle="modal" data-target="#modal"
+                                data-jobpath="{{job.path}}" data-jobname={{job.pretty}}
+                                >
+                            <i class="bi bi-pencil-square"></i>
+                            </a>
+                            <a href="#" class="action" 
+                                data-toggle="tooltip" data-placement="bottom" title="hide" 
+                                data-action="job_remove" data-path="{{job.path}}" data-reload="1">
+                            <i class="bi bi-eye-slash-fill"></i>
+                            </a>
+
                         </div>
+                        
                     </div>
 
                 </div>
@@ -60,4 +76,35 @@
     </div>
 
     </section>
+
 {% endblock content %}
+
+{% block modal %}
+    <!-- Edit Job -->
+    <form method="post">
+    {% csrf_token %}
+    <div class="modal fade" id="job-edit" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Job</h5>
+                    <button type="button" class="btn-close modal-dismiss" data-dismiss='#job-edit' aria-label="Close"></button>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="container">
+                        
+                        <label for="job-name">Name</label>
+                        <input class="form-control" id="job-name" type='text' name='name' />
+                        <input id="job-path" type='hidden' name='path' />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm modal-dismiss" data-dismiss="#job-edit">Close</button>
+                    <input type="submit" value='Submit' class="btn btn-primary btn-sm">
+                </div>
+            </div>
+        </div>
+    </div>  
+    </form>
+{% endblock modal%}

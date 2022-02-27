@@ -58,7 +58,7 @@ class Image:
         return self.cmd( 'clipboard:', str(filename) )
 
     def GetSize(self):
-        #print(self.GetFile())
+        
         if not self.GetFile().Exists():
             return False
 
@@ -66,10 +66,34 @@ class Image:
         height = self.cmd('identify', '-format', '%h', str(self.GetFile()))
         return (int(width), int(height))
 
+    def HDRICover(self, filename=None):
+        if not filename:
+            filename = self.GetFile()
+
+        size = self.GetSize()
+        width = size[0]
+        height = size[1]
+
+        args = [
+            self.GetFile().AsString(),
+            '-auto-level',
+            '-auto-gamma',
+            '-resize',
+            '512x512',
+            '-background',
+            'black',
+            '-gravity',
+            'center',
+            '-extent',
+            '512x512',            
+            str(filename)
+        ]
+        self.cmd(*args)
+        self.SetFile(filename)
+
     def Square(self, filename=None):
         if not filename:
             filename = self.GetFile()
-        
 
         size = self.GetSize()
         width = size[0]
@@ -293,7 +317,7 @@ class Path:
             other = Path(other)
 
         if other.IsAbsolute():
-            other = other.GetRelative(1)
+            other = other.Trim()
 
         other.segments = self.segments+other.segments
         return other
@@ -406,6 +430,9 @@ class Path:
             return self.segments[1]
         else:
             return self.segments[0]
+
+    def Trim(self):
+        return self.GetRelative( len(self.segments)-1 )
 
     def GetHead(self):
         return self.segments[-1]
@@ -645,7 +672,7 @@ class Format:
     formats['obj'] = 'OBJ'
     formats['rs'] = 'RedshiftProxy'
     formats['tex'] = 'Texture'
-    #formats['hdr'] = 'HDRI'
+    formats['hdr'] = 'HDRI'
     formats['mat'] = 'Material'
 
     def __init__(self, format):
@@ -661,7 +688,7 @@ class Format:
                 self.long = val
                 return None
 
-        #raise Exception('Format {} Not Found.'.format(format))
+        raise Exception('Format '+format+'Not Found.')
         
     def GetLong(self):
         return self.long
@@ -766,7 +793,7 @@ class Base:
         if layer is None:
             layer = USD.FindOrOpen(self.GetFilePath())
         data = {}
-        for key in ['path', 'layer', 'description']:
+        for key in ['path', 'layer', 'description', 'group', 'format']:
             if key in self.data.keys():
                 data[key] = self.data[key]
         layer.customLayerData = data
@@ -786,6 +813,33 @@ class Base:
             layer = USD.OpenAsAnonymous(self.GetFilePath())
         return layer.customLayerData
 
+    def GetLayerData(self, key):
+        if not self.Exists():
+            return None
+
+        data = self.GetCustomLayerData()
+        if key in data:
+            return data[key]
+        
+        return None
+
+    def HasLayerData(self, key):
+        if not self.Exists():
+            return False
+        data = self.GetCustomLayerData()
+        return key in data
+
+    def SetLayerData(self, key, value):
+        if not self.Exists():
+            return False
+
+        layer = USD.FindOrOpen(self.GetFilePath())
+        data = self.GetCustomLayerData()
+        data[key] = value
+        layer.customLayerData = data
+        layer.Save()
+        return True
+
     def GetDescription(self):
         if not self.Exists():
             return ''
@@ -796,13 +850,28 @@ class Base:
 
         return ''
 
+    def SetPrettyName(self, name):
+        return self.SetLayerData('pretty', name)
+
+    def GetPrettyName(self):
+        if not self.Exists():
+            return None
+        data = self.GetCustomLayerData()
+        if 'pretty' in data.keys():
+            
+            return data['pretty']
+
+        return String.Pretty( self.GetName() )
+
     # Json Encode
-    def JsonEncode(self):
-        data = self.data
+    def Serialize(self):
+        #data = self.data
+        data = {}
+        data['description'] = self.GetDescription()
         data['name'] = self.GetName()
         data['exists'] = self.Exists()
         data['hasCover'] = self.HasCover()
-        data['cover'] = self.GetCover()
+        data['cover'] = self.GetCover().AsString()
         data['file'] = self.GetFilePath().AsString()
         data['path'] = self.GetPath().AsString()
 
@@ -834,6 +903,10 @@ class Job(Base):
     def Create(self):
         from pxr import Usd, UsdGeom
 
+        if self.Exists():
+            self.AddToRecent(self.GetDir())
+            return True
+
         self.GetFilePath().GetParent().Create()
         for dir in ['elements/input', 'elements/output', 'elements/2D', 'elements/3D']:
             folder = Path(self.GetDir()) + dir
@@ -847,6 +920,7 @@ class Job(Base):
         UsdGeom.SetStageMetersPerUnit(stage, 1)
         UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
         layer.Save()
+        self.AddToRecent(self.GetDir())
 
     def Delete(self):
         if self.data['directory'].Exists():
@@ -919,10 +993,10 @@ class Job(Base):
     def GetName(self):
         return Path(self.data['directory']).GetHead()
 
-    def AsJson(self):
-        data = Base.JsonEncode(self)
+    def Serialize(self):
+        data = Base.Serialize(self)
         data['path'] = self.data['directory']
-        data['pretty'] = String.Pretty( self.GetName() )
+        data['pretty'] = self.GetPrettyName()
         return data
         
     def GetChildren(self):
@@ -1016,7 +1090,17 @@ class Shot(Base):
             raise Exception('Layer does not have frame range set')
         layer = USD.OpenAsAnonymous( self.GetFilePath() )
         return (layer.startTimeCode, layer.endTimeCode)
-            
+
+def asset(**kwargs):
+    if 'format' not in kwargs.keys():
+        raise Exception('format not specified.')
+    
+    format = Format( kwargs['format'] ).GetLong()
+    if not hasattr(sys.modules[__name__], format):
+        raise Exception('Invalid Format {}'.format(format))
+
+    return getattr(sys.modules[__name__], format)(**kwargs)
+
 class Asset(Base):
     def __init__(self, path='', **kwargs):
         Base.__init__(self, **kwargs)
@@ -1031,14 +1115,19 @@ class Asset(Base):
         defaults['version'] = 0
         defaults['frameRange'] = None
         defaults['filePerFrame'] = False
-        defaults['format'] = 'usd'
-
+        defaults['format'] = None
         self.SetDefaults(defaults, **kwargs)
-
         self.SetPaths()
 
         self.release = []
         self.gather = []
+
+    @staticmethod
+    def url(url):
+        from urllib import parse
+        args = dict( parse.parse_qsl( parse.urlsplit(url).query ) )
+        args['version'] = args['version']  if 'version' in args.keys() else -1
+        return Asset(**args)
 
     def SetPaths(self):
         # Patterns
@@ -1056,10 +1145,15 @@ class Asset(Base):
         self.paths['cover'] = '{0}/{1}.png'.format( self.GetRootPath(), self.GetName() )
 
     def GetRootPath(self):
-        outpath = self.GetJobPath() + 'assets'
-        outpath+= self.GetPath().GetParent()
+        #outpath = self.GetJobPath() + 'assets'
+        outpath = Path(self.GetJobPath()) + Path('assets') + Path(self.GetPath().GetParent())
         return outpath
 
+    def IsGroup(self):
+        if self.HasLayerData('group'):
+            return self.GetLayerData('group')
+        return True
+    
     # Parent
     def GetParent(self):
         return Asset( path=self.GetPath().GetParent(), job=self.GetJob() )
@@ -1116,6 +1210,7 @@ class Asset(Base):
             layer.subLayerPaths = [outpath]
 
         # Set Custom Layer Data
+        self.data['group'] = bool(parent)
         self.SetCustomLayerData(layer)
 
         # Set Asset Info           
@@ -1138,38 +1233,62 @@ class Asset(Base):
         layer.Save()
 
     # Json
-    def JsonEncode(self, usd=False):
-        data = Base.JsonEncode(self)
+    def Serialize(self, deep=False):
+        #data = Base.Serialize(self)
+        data = super().Serialize()
 
-        data['format'] = self.GetFormat()
+        #data['format'] = self.GetFormat()
         data['children'] = self.GetChildren()
         data['hasChildren'] = len(data['children'])
         data['parent'] = self.GetPath().GetParent().AsString()
         data['hasParent'] = self.GetPath().HasParent()
-
-        data['versions'] = [ (v, String.versionAsString(v)) for v in self.GetVersions(fromDisk=True) ]
-        data['hasVersion'] = len(data['versions']) > 0
+        data['isGroup'] = self.IsGroup()
+        data['job'] = self.GetJobPath().AsString()
         data['version'] = self.GetVersion()
         data['versionAsString'] = self.GetVersionAsString()
+        
+        if deep:
+            data['versions'] = self.GetVersionsDict()
+            data['hasVersion'] = bool(len(data['versions'].keys()))
+            data['formats'] = self.GetFormatsDict()
+            if self.data['format'] and self.data['format'] in data['formats'].keys():
+                data['format'] = self.data['format']
+            else:
+                data['format'] = self.GetLatestFormat()
+            data['formatlong'] = Format(data['format']).GetLong()
 
-        data['formats'] = []
-        if usd:
-            data['usd'] = self.GetAssetInfo()
+            
+            assetInfo = self.GetAssetInfo()
+            data['date'] = assetInfo['date']
+            data['comment'] = assetInfo['comment']
+            data['user'] = assetInfo['user']
 
-        if False:
-            print('### Asset ###')
-            String.pprint(data)
-            print('#############')
+            if False:
+                print('### Asset ###')
+                String.pprint(data['formats'])
+                #print( self.GetFilePath() )
+                #print( self.GetRootPath() )
+                #print(self.GetPath() )
+                print('#############')
         return data
 
     # Format
     def GetFormat(self):
+        if self.data['format'] is None:
+            return 'usd'
+
         return self.data['format']
 
     def SetFormat(self, format):
         self.data['format'] = format
         self.SetPaths()
     
+    def GetFormatsDict(self):
+        formats = {}
+        for format in self.GetFormats():
+            formats[format] = Format(format).GetLong()
+        return formats
+
     def GetFormats(self):
         from pxr import Usd, Sdf
 
@@ -1249,6 +1368,12 @@ class Asset(Base):
 
     def GetVersionAsString(self, offset=0):
         return 'v{}'.format( str(self.GetVersion(offset)).zfill(3) )
+
+    def GetVersionsDict(self):
+        versions = {}
+        for v in self.GetVersions():
+            versions[v] = String.versionAsString(v)
+        return versions
 
     def GetVersions(self, fromDisk=False):
         if not self.GetFilePath().Exists():
@@ -1380,9 +1505,12 @@ class Asset(Base):
                 self.gather.append(arg)
 
     def Release(self, _name=None, **kwargs):
-        
-        if not len(self.release):
-            Exception('Asset object does not have any release methods.')
+        if not self.release:
+            if 'filepath' in kwargs.keys():
+                filepath = Path(kwargs['filepath']).Copy(self.GetFilePath('session'))
+                self.Create()
+                return True
+            raise Exception('Asset object does not have any release methods.')
 
         if _name is None:
             if 'releaseMethod' in self.data.keys():
@@ -1418,21 +1546,33 @@ class HDRI(Asset):
         kwargs['format'] = 'hdr'
         Asset.__init__(self, path, **kwargs)
         self.AddReleaseMethod('Export')
-        
-    def Export(self, source):
+
+    def Export(self, filepath):
         import shutil
 
-        if not isinstance(source, Path):
-            source = Path(source)
+        if not isinstance(filepath, Path):
+            filepath = Path(filepath)
 
-        if not source.Exists():
-            raise Exception('error reading file {}'.format(source))
+        if not filepath.Exists():
+            raise Exception('error reading file {}'.format(filepath))
 
+        # Create Parent
         if not self.GetFilePath('session').GetParent().Exists():
             self.GetFilePath('session').GetParent().Create()
         
-        shutil.copyfile(str(source), str(self.GetFilePath('session')))
+        self.SetExtension( filepath.GetExtension() )
+        filepath.Copy( self.GetFilePath('session') )
         self.Create()
+
+        # Cover
+        for ext in ['jpg', 'png']:
+            cover = Path(filepath).SetExtension(ext)
+            if cover.Exists():
+                cover.HDRICover( self.GetCover() )
+                return True
+        
+        cover = Image(filepath)
+        cover.HDRICover( self.GetCover() )
 
 class Texture(Asset):
     def __init__(self, path='', **kwargs):
