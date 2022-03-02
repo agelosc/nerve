@@ -1,3 +1,0 @@
-Django==3.2.9
-PySide2==5.15.2
-usd-core==21.11
