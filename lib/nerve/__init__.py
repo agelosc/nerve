@@ -1,5 +1,54 @@
-import os, sys, errno
-import json, time
+import os, sys
+import json, time, logging
+
+class logger:
+    def __init__(self, level=logging.DEBUG):
+        self.log = logging.getLogger('')
+        self.log.setLevel(level)
+
+        self.handler = logging.StreamHandler()
+        self.format = logging.Formatter('%(levelname)s::[%(name)s]::%(message)s')
+        self.handler.setFormatter(self.format)
+        self.log.addHandler(self.handler)
+
+    def namespace(self):
+        import inspect
+        frame = inspect.currentframe().f_back.f_back
+        ns = []
+
+        # Module
+        ns.append(frame.f_globals['__name__'])
+        
+        # Class
+        args, _, _, value_dict = inspect.getargvalues(frame)
+        if len(args) and args[0] == 'self':
+            instance = value_dict.get('self', None)
+            if instance:
+                ns.append(instance.__class__.__name__)
+        
+        func = frame.f_code.co_name
+        if func != '<module>':
+            ns.append(frame.f_code.co_name)
+
+        self.log = logging.getLogger('.'.join(ns))
+
+    def debug(self, msg, *args, **kwargs):
+        self.namespace()
+        return self.log.debug(msg, *args, **kwargs)
+    def info(self, msg, *args, **kwargs):
+        self.namespace()
+        return self.log.info(msg, *args, **kwargs)
+    def error(self, msg, *args, **kwargs):
+        self.namespace()
+        return self.log.error(msg, *args, **kwargs)
+    def warning(self, msg, *args, **kwargs):
+        self.namespace()
+        return self.log.warning(msg, *args, **kwargs)
+    def critical(self, msg, *args, **kwargs):
+        self.namespace()
+        return self.log.critical(msg, *args, **kwargs)
+
+log = logger(logging.DEBUG)
 
 class Image:
     def __init__(self, filename=None):

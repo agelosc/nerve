@@ -9,6 +9,12 @@ import maya.cmds as cmds
 import maya.mel as mel
 import maya.utils as mu
 
+log = nerve.log
+
+class Test:
+    def __init__(self):
+        log.debug('debug message')
+
 class Path(nerve.Path):
     def __init__(self, path):
         nerve.Path.__init__(self, path, '|')
@@ -617,6 +623,7 @@ class Base:
 class Alembic(nerve.Asset, Base):
     def __init__(self, path='', **kwargs):
         kwargs['format'] = 'abc'
+
         nerve.Asset.__init__(self, path, **kwargs)
         self.AddReleaseMethod('Export')
         self.AddGatherMethod('Import', 'Reference', 'Replace')
@@ -1828,6 +1835,10 @@ class Material(nerve.Material, Base, MaterialTables):
                 for key, value in abstract[grp].items():
                     if isinstance(value, dict):
                         filepath = nerve.Path(value['filepath'])
+                        if not filepath.Exists():
+                            cmds.warning('Texture path does not exist. Skipping texture export {}'.format(filepath))
+                            continue
+                        
                         newpath = self.GetFilePath('textures') + (material+'_'+filepath.GetHead())
                         if newpath == filepath:
                             continue

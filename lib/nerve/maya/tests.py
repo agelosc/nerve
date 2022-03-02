@@ -1,18 +1,19 @@
 import os, sys, inspect
 import unittest
 
+if __name__ == '__main__':
+    import maya.standalone
+    maya.standalone.initialize()
+
 try:
     from importlib import reload
 except:
     pass
 
 import nerve
-reload(nerve)
 import nerve.maya
-reload(nerve.maya)
 from nerve.maya import Node
 import nerve.maya.tools
-reload(nerve.maya.tools)
 
 import maya.cmds as cmds
 
@@ -66,6 +67,10 @@ class Base(unittest.TestCase):
 
         return mat
 
+    def loadPlugin(self, plugin):
+        if not cmds.pluginInfo(plugin, q=True, loaded=True):
+            cmds.loadPlugin(plugin)
+        
 
     def assertDeepEqual(self, src, tar, path=''):
         msg = '{} | src:{} tar:{}'.format(path, src, tar)
@@ -141,7 +146,13 @@ class TestMayaNode(Base):
         self.assertIn( 'B', materials)           
 
 class TestMayaMaterial(Base):
+    @classmethod
+    def setUpClass(cls):
+        for plugin in ['mayaUsdPlugin', 'redshift4maya']:
+            if not cmds.pluginInfo(plugin, q=True, loaded=True):
+                cmds.loadPlugin(plugin)        
 
+    
     def CreateAbstractNetwork(self):
         Mat = nerve.maya.Material('abstract', version=1)
 
@@ -229,6 +240,7 @@ class TestMayaMaterial(Base):
         self.MaterialTypeTest('standardSurface')
 
     def test_usdPreviewSurface(self):
+        self.loadPlugin('mayaUsdPlugin')
         self.MaterialTypeTest('usdPreviewSurface')
 
     def test_phongE(self):
@@ -263,7 +275,7 @@ class TestMayaMaterial(Base):
         Mat = nerve.maya.Material('abstract', version=1)
 
         # Set Abstract Attributes & Textures
-        path = nerve.Path('$NERVE_LOCAL_PATH/test/testSamples/mat')
+        path = nerve.Path('$NERVE_LOCAL_PATH/tests/samples/mat')
 
         Mat.SetTexture(path+'color.jpg', 'diffuse', 'color')
         Mat.SetTexture(path+'gloss.jpg', 'reflection', 'roughness')
@@ -286,6 +298,7 @@ class TestMayaMaterial(Base):
         
 class TestMayaTools(Base):
     def test_rsOpacityToSprite(self):
+        self.loadPlugin('redshift4maya')
         self.NewScene()
         sg = nerve.maya.Node.create('shadingEngine')
         mat = nerve.maya.Node.create('RedshiftMaterial')
@@ -308,6 +321,7 @@ class TestMayaTools(Base):
         self.assertEqual( nerve.maya.Node.getAttr(sprite, 'tex0'), 'opacity.jpg' )
 
     def test_rsSpriteToOpacity(self):
+        self.loadPlugin('redshift4maya')
         self.NewScene()
         sg = Node.create('shadingEngine')
         spr = Node.create('RedshiftSprite')
@@ -443,6 +457,10 @@ class TestAlembic(Base):
             self.assertEqual( cmds.sets('yellow_SG', q=True), [cube[0] + '.f[1:5]'] )
             self.assertEqual( cmds.sets('red_SG', q=True), [cube[0] + '.f[0]'] )
 
+class TestTest(Base):
+    def test_test(self):
+        pass
+
 def Run(test=None):
     testSuite = unittest.TestSuite()
     if not test:
@@ -470,3 +488,6 @@ def Run(test=None):
 
     runner = unittest.TextTestRunner(verbosity=2)
     runner.run(testSuite)
+
+if __name__ == '__main__':
+    unittest.main()

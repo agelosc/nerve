@@ -1,14 +1,11 @@
 import os, sys
-
 sys.path.append( os.environ['NERVE_LOCAL_PATH'] + '/lib')
-
 import unittest
 import nerve
 
-SAMPLES = nerve.Path('$NERVE_LOCAL_PATH/test/testSamples/')
+SAMPLES = nerve.Path('$NERVE_LOCAL_PATH/tests/samples/')
 
 class Utilities(unittest.TestCase):
-
     def testPath(self):
         # Expand Environmental Variables
         self.assertEqual( nerve.Path('$TEMP'), os.environ['TEMP'] )
@@ -156,9 +153,8 @@ class Utilities(unittest.TestCase):
         self.assertEqual( nerve.String.UnSnakeCase('snake_case'), 'Snake Case' )
 
     def testImage(self):
-        samples = nerve.Path('$NERVE_LOCAL_PATH/test/testSamples')
 
-        image = nerve.Image(samples+'testSquare.jpg')
+        image = nerve.Image(SAMPLES+'testSquare.jpg')
         self.assertEqual( image.GetSize(), (512, 512) )
 
         # Save As
@@ -169,13 +165,13 @@ class Utilities(unittest.TestCase):
         self.assertFalse(image.GetFile().Exists())
 
         # Square Landscape
-        image = nerve.Image( samples+'testLandscape.jpg')
+        image = nerve.Image( SAMPLES+'testLandscape.jpg')
         image.Square( outimage )
         self.assertTrue( image.GetFile().Exists() )
         self.assertEqual( image.GetSize(), (512, 512) )
 
         # Square Portrait
-        image = nerve.Image( samples+'testPortrait.jpg')
+        image = nerve.Image( SAMPLES+'testPortrait.jpg')
         image.Square( outimage )
         self.assertTrue( image.GetFile().Exists() )
         self.assertEqual( image.GetSize(), (512, 512) )
@@ -184,14 +180,13 @@ class Utilities(unittest.TestCase):
         self.assertFalse(image.GetFile().Exists())
 
         # Convert EXR
-        image = nerve.Image( samples+'testEXR.exr')
+        image = nerve.Image( SAMPLES+'hdri/hdri.exr')
         image.SaveAs( outimage )
         self.assertTrue(image.GetFile().Exists())
         image.GetFile().Remove()
         self.assertFalse(image.GetFile().Exists())
 
 class Nerve(unittest.TestCase):
-
     def NewJob(self):
         job = nerve.Job()
         if job.Exists():
@@ -218,7 +213,6 @@ class Nerve(unittest.TestCase):
     def testAsset(self):
         job = self.NewJob()
 
-        
         # Metadata
         asset = nerve.Asset('metadata', version=1, description='Metadata', format='usd', comment="USD comment v001")
         asset.Release(filepath=SAMPLES+'asset.usd')
@@ -231,9 +225,6 @@ class Nerve(unittest.TestCase):
         # Format
         asset = nerve.Asset('format', version=1)
         #print(asset.GetFormat())
-
-        
-
         
 if __name__ == '__main__':
     unittest.main()
