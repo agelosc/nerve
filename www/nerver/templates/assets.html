@@ -4,14 +4,16 @@
 {% block sidebar %}
 <ul>
     <li class="">
-        <a href="assets/?job={{job}}"><span style='font-weight: bold;'>Assets</span></a>
+        <a href="/assets/?job={{job.path}}"><span style='font-weight: bold;'>Assets</span></a>
+    </li>
+    <!--
+    <li class="">
+        <a href="/dailies/?job={{job}}"><span>Dailies</span></a>
     </li>
     <li class="">
-        <a href="dailies/?job={{job}}"><span>Dailies</span></a>
-    </li>
-    <li class="">
-        <a href="dailies/?job={{job}}"><span>Sequences</span></a>
-    </li>    
+        <a href="/Sequences/?job={{job}}"><span>Sequences</span></a>
+    </li> 
+    -->  
 </ul>    
 {% endblock sidebar%}
 

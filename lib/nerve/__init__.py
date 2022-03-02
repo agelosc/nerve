@@ -1251,6 +1251,7 @@ class Asset(Base):
             data['versions'] = self.GetVersionsDict()
             data['hasVersion'] = bool(len(data['versions'].keys()))
             data['formats'] = self.GetFormatsDict()
+
             if self.data['format'] and self.data['format'] in data['formats'].keys():
                 data['format'] = self.data['format']
             else:

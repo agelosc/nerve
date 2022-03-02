@@ -123,6 +123,8 @@ class Job(View):
 
 class Asset(View):
     def get(self, request):
+        from urllib.parse import quote_plus
+
         job = request.GET.get('job')
         Job = nerve.Job(job)
         if not Job.Exists():
@@ -140,6 +142,13 @@ class Asset(View):
 
         context['job'] = Job.Serialize()
         context['asset'] = Asset.Serialize(deep=not Asset.IsGroup())
+        urldata = {}
+        for key in ['job', 'path', 'version', 'format']:
+            if key in request.GET.dict():
+                urldata[key] = args[key]
+
+        context['asset']['url'] = '&'.join([ '{}={}'.format(key, val) for key,val in urldata.items()] )
+
         context['asset_list'] = []
         for child in Asset.GetChildren():
             args['path'] = Asset.GetPath() + child

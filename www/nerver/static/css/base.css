@@ -42,4 +42,8 @@ hr {color: #000; }
 
 #tooltip { background-color: #333; color: white; padding:5px 10px; border-radius:4px; font-size: 13px; }
 
-.asset .input-group-prepend { min-width:20% }
+.asset .assetdata { margin-top: 15px; }
+.asset .input-group-prepend { min-width:15%;}
+.asset .input-group-text {height:100%; font-size:0.9em;}
+.asset textarea { min-height: 110px; resize: none; }
+.asset .btn { min-width: 50px; }

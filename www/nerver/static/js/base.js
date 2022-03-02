@@ -9,33 +9,23 @@ $(document).ready(function(){
         })
     })
 
-    $('.dropdown-toggle').on('click', null, function(){
-        $(this).dropdown('toggle');
-    });    
-
     // Dropdown selection
     function selectDropdown(obj) {
         const target = $(obj).data('target');
         $(target).html( $(obj).html() + ' ' );
-        $(target).dropdown('toggle');
+        //$(target).dropdown('toggle');
     }
 
-    $('.asset .dropdown-item').click( function(){
-        selectDropdown(this);
-        assetUpdate(this);
-    });
-    
-    //$('.asset .dropdown-item').click(function(event){
-    
     function assetUpdate(obj){
+        var assetData = JSON.parse(document.getElementById('asset-data').textContent);
         const anchor = $(obj).data('anchor');
         const key = $(obj).data('key');
         const val = $(obj).data('val')
 
         var url = new URL( $(anchor).prop('href') );
         url.searchParams.set(key, val);
-        if(key == 'version'){
-            url.searchParams.delete('format')
+        if(key == 'version' && url.searchParams.has('format')){
+                url.searchParams.delete('format')
         }
         var href = url.pathname + decodeURIComponent(url.search);
         $(anchor).attr('href', href)
@@ -46,6 +36,7 @@ $(document).ready(function(){
             url: "/action",
             data: {"ajax":true, "action":"asset", "url":href},
             success: function(b){
+                document.getElementById('asset-data').textContent = JSON.stringify(b);
                 $('#comment').html(b.comment);
                 $('#user').val(b.user);
                 $('#date').val(b.date);
@@ -77,71 +68,10 @@ $(document).ready(function(){
 
     }
 
-    function updateAsset(event){
-        //event.preventDefault();
-        const anchor = $(this).data('anchor');
-        const key = $(this).data('key');
-        const val = $(this).data('val');
-
-        var href = $(anchor).prop('href');
-        var url = new URL(href);
-        url.searchParams.set(key, val )
-        var result = url.pathname + decodeURIComponent(url.search);
-        $(anchor).attr('href', result);
-        //window.history.replaceState(null, document.title, result);
-
-        $.ajax({
-			headers: { "X-CSRFToken": csrftoken },
-			type: "POST",
-			url: "/action",
-			data: {"ajax":true, "action":"asset", "url":result},
-			success: function(b) {
-				if(b != "")
-				{
-                    $('#comment').html(b["comment"])
-                    $('#user').val(b["user"])
-                    $('#date').val(b["date"])
-
-                    if(key == 'format')
-                    {
-                        
-                    }
-
-                    if(key == 'version')
-                    {
-                        
-                        var button = $('#formats');
-                        button.html(b.formatlong);
-                        var menu = $('#formats').next();
-                        $(menu).empty();
-                        for( const [k, v] of Object.entries(b.formats))
-                        {   
-                            //<a class="dropdown-item" href="#" data-target="#formats" data-anchor="#asset-url" data-key="format" data-val={{format}}>{{formatlong}}</a>
-                            const anchor = document.createElement('a')
-                            
-                            anchor.className = 'dropdown-item';
-                            anchor.href='#';
-                            anchor.dataset.target='#formats';
-                            anchor.dataset.anchor = '#asset-url'
-                            anchor.dataset.key = "format";
-                            anchor.dataset.val = k
-                            anchor.innerText = v
-                            $(anchor).appendTo(menu).click(updateAsset);
-                            //$(anchor).appendTo(menu).click(toggleDropdown);
-                            //$(anchor).appendTo(menu).click(selectDropdown);
-                            
-                        }
-                    }
-                    //console.log(b)
-                    
-				}
-			}            
-        });
-    };
-    //$('.asset .dropdown-item').on('click', null, updateAsset );
-    
-
-
+    $('.asset .dropdown-item').click( function(){
+        selectDropdown(this);
+        assetUpdate(this);
+    });
 
     // Modals
     $('[data-toggle="modal"]').click( function(event) {

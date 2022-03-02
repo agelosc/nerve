@@ -1,18 +1,73 @@
 {% load static %}
 <div class="container-fluid nopadding asset">
-  <div class="row">
+  <div class="row" style="padding: 0px; 0px; margin: 10px 0px; background-color: #efefef;">
     <div class="col-lg-4 nopadding">
       <!-- BOX [ -->
       <div class="box">
         <img class="cover img-fluid" src="{% if asset.hasCover %} /image/{{asset.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
         <div class="overlay">
           <div class="title">
-            <a href="/assets/?job={{job.path}}&path={{asset.path}}" id="asset-url"><h1>{{ asset.name }}</h1></a>
+            <a href="/assets/?{{ asset.url }}" id="asset-url"><h1>{{ asset.name }}</h1></a>
           </div>
           <div class="apps">
+
+
+
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- BOX ] -->
+    <!-- Details [ -->
+    <div class="col assetdata">
+      <!-- Description [-->
+      <form>
+        {{ asset|json_script:"asset-data"}}
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Job</span>
+          </div>
+          <input type="text" class="form-control" value="{{asset.job}}" readonly>
+        </div>        
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Path</span>
+          </div>
+          <input type="text" class="form-control" value="{{asset.path}}" readonly>
+        </div>        
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Description</span>
+          </div>
+          <input type="text" class="form-control" value="{{asset.description}}">
+        </div>
+
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Date</span>
+          </div>
+          <input type="text" class="form-control" id="date" value="{{asset.date}}" readonly>
+        </div>
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">User</span>
+          </div>
+          <input type="text" class="form-control" id="user" value="{{asset.user}}" readonly>
+        </div>            
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Comments</span>
+          </div>
+          <textarea class="form-control" id="comment" aria-label="With textarea">{{asset.comment}}</textarea>
+        </div>
+
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Version</span>
+          </div>
             <!-- Versions Dropdown [ -->
-            <div class="dropdown">
-              <button class="btn btn-primary dropdown-toggle" type="button" id="versions" data-toggle="dropdown">
+            <div class="dropend">
+              <button class="btn btn-primary dropdown-toggle" type="button" id="versions" data-bs-toggle="dropdown" data-bs-auto-close="true">
                 {{ asset.versionAsString }}
               </button>
               <div class="dropdown-menu">
@@ -21,11 +76,15 @@
                 {% endfor %}
               </div>
             </div>
-            <!-- Versions Dropdown ]-->
-
+            <!-- Versions Dropdown ]-->  
+        </div>    
+        <div class="input-group input-group-sm mb-1">
+          <div class="input-group-prepend">
+            <span class="input-group-text">Format</span>
+          </div>
             <!-- Format Dropdown [ -->
-            <div class="dropdown">
-              <button class="btn btn-primary dropdown-toggle" type="button" id="formats" data-toggle="dropdown">
+            <div class="dropend">
+              <button class="btn btn-primary dropdown-toggle" type="button" id="formats" data-bs-toggle="dropdown" data-bs-auto-close="true">
                 {{ asset.formatlong }}
               </button>
               <div class="dropdown-menu">
@@ -35,59 +94,8 @@
               </div>
             </div>
             <!-- Format Dropdown ] -->
-
           </div>
-        </div>
-      </div>
-    </div>
-    <!-- BOX ] -->
-    <!-- Details [ -->
-    <div class="col nopadding">
-      <!-- Description [-->
-      <form>
-      <div class="input-group mb-2">
-        <div class="input-group-prepend">
-          <span class="input-group-text">Job</span>
-        </div>
-        <input type="text" class="form-control" value="{{asset.job}}" readonly>
-      </div>        
-      <div class="input-group mb-2">
-        <div class="input-group-prepend">
-          <span class="input-group-text">Path</span>
-        </div>
-        <input type="text" class="form-control" value="{{asset.path}}" readonly>
-      </div>        
-      <div class="input-group mb-2">
-        <div class="input-group-prepend">
-          <span class="input-group-text">Description</span>
-        </div>
-        <input type="text" class="form-control" value="{{asset.description}}">
-      </div>
-
-      <div class="input-group mb-2">
-        <div class="input-group-prepend">
-          <span class="input-group-text">Date</span>
-        </div>
-        <input type="text" class="form-control" id="date" value="{{asset.date}}" readonly>
-      </div>
-      <div class="input-group mb-2">
-        <div class="input-group-prepend">
-          <span class="input-group-text">User</span>
-        </div>
-        <input type="text" class="form-control" id="user" value="{{asset.user}}" readonly>
-      </div>            
-      <div class="input-group">
-        <div class="input-group-prepend">
-          <span class="input-group-text" style="height: 100%">Comments</span>
-        </div>
-        <textarea class="form-control" id="comment" aria-label="With textarea">{{asset.comment}}</textarea>
-      </div>    
-    </form>       
-
-      <!-- Descriptioj ]-->
-
-
-
+      </form>       
     </div>
     <!-- Details ] -->
   </div>
