@@ -7,7 +7,7 @@ class logger:
         self.log.setLevel(level)
 
         self.handler = logging.StreamHandler()
-        self.format = logging.Formatter('%(levelname)s::[%(name)s]::%(message)s')
+        self.format = logging.Formatter('%(levelname)s::%(name)s]::%(message)s')
         self.handler.setFormatter(self.format)
         self.log.addHandler(self.handler)
 
@@ -39,8 +39,13 @@ class logger:
         self.namespace()
         return self.log.info(msg, *args, **kwargs)
     def error(self, msg, *args, **kwargs):
+        import inspect
+        frame = inspect.currentframe().f_back
+        info = inspect.getframeinfo(frame)
+
         self.namespace()
-        return self.log.error(msg, *args, **kwargs)
+        return self.log.error(str(info.lineno)+'|'+msg, *args, **kwargs)
+
     def warning(self, msg, *args, **kwargs):
         self.namespace()
         return self.log.warning(msg, *args, **kwargs)
@@ -107,38 +112,11 @@ class Image:
         return self.cmd( 'clipboard:', str(filename) )
 
     def GetSize(self):
-        
         if not self.GetFile().Exists():
             return False
-
-        width  = self.cmd('identify', '-format', '%w', str(self.GetFile()))
-        height = self.cmd('identify', '-format', '%h', str(self.GetFile()))
+        width  = self.cmd('identify', '-ping', '-format', '%w', str(self.GetFile()))
+        height = self.cmd('identify', '-ping', '-format', '%h', str(self.GetFile()))
         return (int(width), int(height))
-
-    def HDRICover(self, filename=None):
-        if not filename:
-            filename = self.GetFile()
-
-        size = self.GetSize()
-        width = size[0]
-        height = size[1]
-
-        args = [
-            self.GetFile().AsString(),
-            '-auto-level',
-            '-auto-gamma',
-            '-resize',
-            '512x512',
-            '-background',
-            'black',
-            '-gravity',
-            'center',
-            '-extent',
-            '512x512',            
-            str(filename)
-        ]
-        self.cmd(*args)
-        self.SetFile(filename)
 
     def Square(self, filename=None):
         if not filename:
@@ -179,6 +157,42 @@ class Image:
             self.cmd(*args)
             
         self.SetFile(filename)
+
+    def GetKays(self, size=None):
+        if size is None:
+            size = self.GetSize()
+
+        if isinstance(size, int):
+            minsize = size
+        else:
+            #minsize = size[0] if size[0]<size[1] else size[1]
+            minsize = size[0] if size[0]>size[1] else size[1]
+
+        if minsize <= 1000:
+            return 1
+        kays = int(round(minsize/1000))
+        return kays
+
+    def Scale(self, scale, filename=None):
+        if not filename:
+            filename = self.GetFile()
+        size = self.GetSize()
+        newsize = ( int(round(size[0]*scale)), int(round(size[1]*scale)) )
+        newname = '{}.{}K.{}'.format( filename.GetName().split('.')[0], self.GetKays(newsize), filename.GetExtension() )
+        newfile = filename.GetParent() + newname
+        if newfile.Exists():
+            self.SetFile(newfile)
+            log.info(newfile + ' already exists. Skipping Scale.')
+            return False
+
+        args = [
+            self.GetFile().AsString(),
+            '-resize',
+            '{}x{}!'.format( newsize[0], newsize[1] ),
+            str(newfile),
+        ]
+        self.cmd(*args)
+        self.SetFile(newfile)
 
     def Open(self):
         os.startfile(self.GetFile().AsString())
@@ -335,6 +349,11 @@ class Path:
     @staticmethod
     def GetThisFile():
         return Path( __file__ )
+
+    @staticmethod
+    def GetThisDir():
+        return Path.GetThisFile().GetParent()
+
 
     @staticmethod
     def GetDrives():
@@ -823,19 +842,35 @@ class Base:
             filepath = Path(filepath)
 
         if not filepath.Exists():
-            print('{} does not exist. Cannot set cover.'.format(filepath))
+            log.warning('{} does not exist. Cannot set cover.'.format(filepath))
             return False
 
         cover = Image(filepath)
         cover.Square()
         cover.SaveAs( self.GetCover() )
-
+        
+    def FindCover(self):
+        if self.HasCover():
+            return self.GetCover()
+        
+        if self.HasChildren():
+            for child in self.GetChildren():
+                childobj = self.GetChild(child)
+                if childobj.HasCover():
+                    return childobj.GetCover()
+        return False
+        
     # Hierarchy
     def HasParent(self): 
         return self.GetPath().HasParent()
 
     def HasChildren(self):
         return len(self.GetChildren())
+
+    def GetChild(self, child):
+        data = self.data.copy()
+        data['path'] = self.data['path'] + '/' + child
+        return type(self)(**data)
 
     # Layer Data
     def SetCustomLayerData(self, layer=None):
@@ -844,17 +879,12 @@ class Base:
         data = {}
         for key in ['path', 'layer', 'description', 'group', 'format']:
             if key in self.data.keys():
+                # Skip if format is not set
+                if key == 'format' and self.data['format'] is None:
+                    continue
                 data[key] = self.data[key]
         layer.customLayerData = data
 
-        '''
-        for key,val in self.data.items():
-            if key not in ['version', 'format', 'filePerFrame']:
-                continue
-            if isinstance(val, (str, int, float, bool, dict)):
-                data[key] = val
-            layer.customLayerData = data
-            '''
         layer.Save()
 
     def GetCustomLayerData(self, layer=None):
@@ -919,8 +949,13 @@ class Base:
         data['description'] = self.GetDescription()
         data['name'] = self.GetName()
         data['exists'] = self.Exists()
+        
+        # Cover
         data['hasCover'] = self.HasCover()
         data['cover'] = self.GetCover().AsString()
+        data['findCover'] = self.FindCover()
+        data['hasFindCover'] = bool(data['findCover'])
+
         data['file'] = self.GetFilePath().AsString()
         data['path'] = self.GetPath().AsString()
 
@@ -993,10 +1028,10 @@ class Job(Base):
         if str(path) in conf['local']['recentJobs']:
             conf['local']['recentJobs'].remove(str(path))
             conf.SetLocalData()
-            print('Job {} removed from recents'.format(path)),
+            log.info('Job {} removed from recents'.format(path)),
             return True
 
-        print('Job {} not found in recents. Skipping...'.format(path)),
+        log.warning('Job {} not found in recents. Skipping...'.format(path)),
         return True
 
     @staticmethod
@@ -1597,6 +1632,80 @@ class HDRI(Asset):
         Asset.__init__(self, path, **kwargs)
         self.AddReleaseMethod('Export')
 
+    def GetKays(self):
+        img = Image(self.GetFilePath('session'))
+        return img.GetKays()
+
+    def SetCover(self):
+        log.info('Creating HDRI Cover for {}, this might take a while.'.format(self.GetPath()))
+        filepath = self.GetFilePath('session')
+        img = Image(filepath)
+        size = img.GetSize()
+        width = size[0]
+        height = size[1]
+
+        if width != height:
+            if width < height:
+                args = [
+                    filepath.AsString(),
+                    '-crop',
+                    '{0}x{1}+{2}+{3}'.format(width, width, 0, int((height-width)/2)),
+                    '-resize',
+                    '512x512!',
+                    str(self.GetCover())
+                ]
+                img.cmd(*args)
+            else:
+                args = [
+                    filepath.AsString(),
+                    '-crop',
+                    '{0}x{1}+{2}+{3}'.format(height, height, int((width-height)/2), 0),
+                    '-resize',
+                    '512x512!',
+                    str(self.GetCover())
+                ]
+                img.cmd(*args)
+        else:
+            args = [
+                filepath.AsString(),
+                '-resize',
+                '512x512!',
+                str(self.GetCover())
+            ]
+            img.cmd(*args)
+
+    def SetCoverOLD(self):
+        filepath = self.GetFilePath('session')
+        if not filepath.Exists():
+            log.error('HDRI file does not exist. Cannot set cover: {}'.format( filepath )  )
+            return False
+
+        cover = Image(filepath)
+        size = cover.GetSize()
+        width = size[0]
+        height = size[1]
+
+        args = [
+            filepath.AsString(),
+            #'-auto-level',
+            #'-auto-gamma',
+            '-crop',
+            '{}x{}+{}+{}'.format( width, height, int((width-height))/2, 0),
+            '-resize',
+            '512x512',
+            #'-background',
+            #'black',
+            #'-gravity',
+            #'center',
+            #'-extent',
+            #'512x512',            
+            str(self.GetCover())
+        ]
+        log.info('Creating HDRI Cover. This might take a while.')
+        cover.cmd(*args)
+        cover.SetFile(self.GetCover())
+        return True
+
     def Export(self, filepath):
         import shutil
 
@@ -1615,14 +1724,7 @@ class HDRI(Asset):
         self.Create()
 
         # Cover
-        for ext in ['jpg', 'png']:
-            cover = Path(filepath).SetExtension(ext)
-            if cover.Exists():
-                cover.HDRICover( self.GetCover() )
-                return True
-        
-        cover = Image(filepath)
-        cover.HDRICover( self.GetCover() )
+        self.SetCover()
 
 class Texture(Asset):
     def __init__(self, path='', **kwargs):
@@ -1634,7 +1736,7 @@ class Texture(Asset):
     
     def Copy(self, **kwargs):
         if 'filepath' not in kwargs.keys():
-            print('Filepath not set')
+            log.error('Filepath not set')
             return False
         
         filepath = kwargs['filepath']
@@ -1642,7 +1744,7 @@ class Texture(Asset):
             filepath = Path(filepath)
 
         if not filepath.Exists():
-            print('Texture file does not exist')
+            log.error('Texture file does not exist')
             return False
 
         self.SetExtension( filepath.GetExtension() )

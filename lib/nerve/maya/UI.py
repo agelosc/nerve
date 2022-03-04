@@ -410,6 +410,15 @@ class Manager(Base):
             self.ctrl['versionlist'] = self.textScrollList(width=82, selectCommand=self.Refresh)
             self.ctrl['formatlist'] = self.textScrollList(width=200, allowMultiSelection=True, selectCommand=self.Refresh)
             cmds.setParent('..')
+        if False: # Lists
+            cmds.rowLayout(numberOfColumns=2)
+            #self.text('')
+            #self.ctrl['pathlist'] = self.textScrollList(width=200, selectCommand=self.SelectPath, doubleClickCommand=self.EnterPath)
+            self.ctrl['versionlist'] = self.textScrollList(width=141, selectCommand=self.Refresh)
+            self.ctrl['formatlist'] = self.textScrollList(width=141, allowMultiSelection=True, selectCommand=self.Refresh)
+            cmds.setParent('..')
+
+
         cmds.text('', height=10)
         self.separator()
         if True: # transform

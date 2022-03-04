@@ -19,18 +19,23 @@ hr {color: #000; }
 .sidebar ul li a:hover { background: #fff;}
 
 /*.sidebar {  border-right: 1px solid #e2e2e2; }*/
-.box { background-color: #eee; overflow:hidden; position:relative; }
-.box .cover {transition: all 0.3s ease; }
+.box { background-color: #eee; overflow:hidden; position:relative; border-radius: 3px;}
+.box .cover {transition: all 0.2s ease; }
 .box:hover .cover { transform: scale(1.05); }
-.box .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%;}
-.box .title { position: relative; top: 50%; transform: translateY(-50%); text-align: center; }
+.box .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; text-align: center; }
+.box .title { position: relative; top: 50%; transform: translateY(-50%); }
 .box .title h1 { font-size: 1.8em; padding: 0px; margin: 0px; color: #fff; }
+.box .title-top { position: absolute; bottom: 0; left: 0; right: 0; padding: 7px; margin: 5px 5px; background-color: #fff; border-radius: 3px; opacity: 0.3;transition: all 0.2s ease; }
+.box .title-top h1 { font-size: 1.3em; padding: 0px; margin: 0px; color: #000; }
+.box:hover .title-top { margin: 0px; padding: 12px; background-color: #aa2200; opacity: 1.0}
+.box:hover .title-top h1 { color: #fff;}
+
 
 .box:hover .apps { bottom: 0px; }
-.box .apps { transition: all 0.3s ease; padding: 15px; position: absolute; bottom: -64px; width:100%; height: 64px; }
+.box .apps { transition: all 0.3s ease; padding: 15px; position: absolute; bottom: -64px; width:100%; height: 64px; text-align: left; }
 .box .apps a { padding: 0px 5px; }
 .box .apps .dropdown { display: inline; }
-.box .apps img { transition: all 0.1s ease; }
+.box .apps img { transition: all 0.3s ease; }
 .box .apps img:hover { transform: scale(1.2); }
 .box .apps a i { font-size:2em; }
 

@@ -4,17 +4,16 @@
     <div class="col-lg-4 nopadding">
       <!-- BOX [ -->
       <div class="box">
+        <a href="/assets/?{{ asset.url }}" id="asset-url">
         <img class="cover img-fluid" src="{% if asset.hasCover %} /image/{{asset.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
         <div class="overlay">
-          <div class="title">
-            <a href="/assets/?{{ asset.url }}" id="asset-url"><h1>{{ asset.name }}</h1></a>
+          <div class="title-top">
+            <h1>{{ asset.name }}</h1>
           </div>
           <div class="apps">
-
-
-
           </div>
         </div>
+      </a>
       </div>
     </div>
     <!-- BOX ] -->

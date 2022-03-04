@@ -1,2 +1,3 @@
 import nerve.maya
-nerve.maya.menu()
+nerve.maya.init()
+

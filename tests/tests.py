@@ -226,6 +226,23 @@ class Nerve(unittest.TestCase):
         asset = nerve.Asset('format', version=1)
         #print(asset.GetFormat())
         
+    def testFindCover(self):
+        job = nerve.Job('R:/library')
+        hdri = nerve.HDRI(path='HDRI/outdoor/Sky490', version=1, job=job)
+        child = nerve.HDRI(path='HDRI/outdoor/Sky490/Sky490_4K', version=1, job=job)
+
+        self.assertTrue(hdri.Exists())
+        self.assertTrue(child.Exists())
+
+        self.assertFalse(hdri.HasCover())
+        self.assertTrue(child.HasCover())
+
+        self.assertTrue(hdri.HasChildren())
+        for child in hdri.GetChildren():
+            obj = hdri.GetChild( child )
+            nerve.String.pprint(obj.data)
+            self.assertTrue(obj.Exists())
+
 if __name__ == '__main__':
     unittest.main()
 

@@ -25,7 +25,7 @@ class Path(nerve.Path):
             path.segments[i] = path.segments[i].split(':')[-1]
         return path
 
-def menu():
+def init():
     print("NERVE::Initialising...")
     mu.executeDeferred('gNerve = nerve.maya.deferred();')
 
@@ -43,6 +43,10 @@ def deferred():
     job = Job(dir)
     if job.Exists():
         job.Set(dir)
+
+    melpath = nerve.Path('$NERVE_LOCAL_PATH/apps/maya/mel')
+    cmd = 'source "'+ melpath.AsString() +'/performFileDropAction.mel";'
+    mel.eval(cmd)
 
 def asset(**kwargs):
     if 'format' not in kwargs.keys():

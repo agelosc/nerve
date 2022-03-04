@@ -10,7 +10,7 @@
         </h2>
     </li>
     {% for job in job_list %}
-        <li><a href="">{{job.pretty}}</a></li>
+        <li><a href="/assets/?job={{job.path}}">{{job.pretty}}</a></li>
     {% endfor %}
     <li><a href="#" class="action border-top" data-action="job_create" data-reload="1"><i class="bi bi-plus-circle"></i> Create </a></li>
     

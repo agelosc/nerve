@@ -155,7 +155,6 @@ class Asset(View):
             Child = nerve.Asset( **args )
             context['asset_list'].append( Child.Serialize() )
 
-        nerve.String.pprint(context)
         response = render(request, 'assets.html', context)
         return response
 

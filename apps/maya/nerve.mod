@@ -2,3 +2,4 @@
 PYTHONPATH+:=../../lib
 PYTHONPATH+:=python
 MAYA_SCRIPT_PATH+:=mel
+MAYA_PLUG_IN_PATH+:=plugins

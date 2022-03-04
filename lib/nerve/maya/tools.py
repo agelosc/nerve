@@ -6,7 +6,10 @@ try:
     from importlib import reload
 except:
     pass
-reload(nerve.maya.UI)
+
+
+def performFileDropAction(url):
+    print(url)
 
 # Utilities
 def duplicate():
