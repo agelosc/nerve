@@ -101,11 +101,11 @@ class Base(unittest.TestCase):
                 self.assertDeepEqual(src[key], tar[key], path+'/'+key)
 
 class Maya(Base):
-    def test_Job(self):
+    def testJob(self):
         path = nerve.Path('$TEMP/nerve/mayaTests')
         job = nerve.maya.Job(path)
-        if job.Exists():
-            job.Delete()
+        if path.Exists():
+            path.Remove(recursive=True)
 
         # Create New Job
         self.assertFalse(path.Exists())
@@ -349,13 +349,13 @@ class TestAlembic(Base):
         cmds.select(cube[0], r=True)
         # Cube Sublayer
         #cubeAsset = nerve.Asset('cube', format='abc', version=1)
-        cubeAsset = nerve.maya.Alembic('cube', version=1)
+        cubeAsset = nerve.maya.Asset('cube', version=1, format='abc')
         cubeAsset.Release()
 
         self.NewScene()
         cubeAsset.Gather('Import')
         self.assertTrue( cmds.objExists(cube[0]) )
-        
+
         # Create Sphere
         cmds.file(new=True, f=True)
         sphere = cmds.polySphere()
@@ -396,6 +396,7 @@ class TestAlembic(Base):
         for crv in animcurve:
             cmds.currentTime(crv['time'], update=True)
             self.assertEqual( crv['value'], Node.getAttr(cube[0], 'ty') )
+        return True
 
         # Reference Anim
         self.NewScene()
@@ -457,9 +458,6 @@ class TestAlembic(Base):
             self.assertEqual( cmds.sets('yellow_SG', q=True), [cube[0] + '.f[1:5]'] )
             self.assertEqual( cmds.sets('red_SG', q=True), [cube[0] + '.f[0]'] )
 
-class TestTest(Base):
-    def test_test(self):
-        pass
 
 def Run(test=None):
     testSuite = unittest.TestSuite()

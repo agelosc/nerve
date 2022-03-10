@@ -74,10 +74,10 @@ class Menu:
         jobs = nerve.Job.GetRecent()
         for recent in jobs:
             job = nerve.Job(recent)
-            label = '{0:<20}{1}'.format(job.GetName(), job.GetDir())
-            label=job.GetName()
-            #label = '{:<20} {:<15}'.format(job.GetDir(), job.GetName())
-            cmds.menuItem(subMenu=False, label=label, parent=self.ctrl['jobs'], command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()) )
+            label = '{0:<20}{1}'.format(job.GetName(), job.GetFilePath('job'))
+            label=job.GetPrettyName()
+            #label = '{:<20} {:<15}'.format(job.GetFilePath('job'), job.GetName())
+            cmds.menuItem(subMenu=False, label=label, parent=self.ctrl['jobs'], command=partial(uicmd, nerve.maya.Job.Set, job.GetFilePath('job')) )
 
         cmds.menuItem(divider=True, parent=self.ctrl['jobs'])
         #cmds.menuItem(subMenu=False, label='Add...', parent=self.ctrl['jobs'], command=self.JobAdd)
@@ -122,9 +122,8 @@ class Menu:
         job = nerve.maya.Job(dir[0])
         job.Create()
 
-        job.Set( job.GetDir() )
-        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()))
-        print('Job {} created.'.format(job.GetDir())),
+        job.Set( job.GetFilePath('job') )
+        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetFilePath('job')))
 
     def JobAdd(self, *args):
         dir = Dialog.File(3)
@@ -142,7 +141,7 @@ class Menu:
             return False
 
         nerve.Job.AddToRecent(dir)
-        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetDir()))
+        cmds.menuItem(subMenu=False, label=job.GetName(), parent=self.ctrl['jobs'], insertAfter='', command=partial(uicmd, nerve.maya.Job.Set, job.GetFilePath('job')))
 
     def reloadNerve(self, *args):
         import nerve
@@ -384,7 +383,7 @@ class Manager(Base):
         if True: # Job
             cmds.rowLayout(numberOfColumns=3, height=35)
             self.text('Job')
-            self.ctrl['job'] = self.textField(text=nerve.Job.Get(), textChangedCommand=self.Refresh)
+            self.ctrl['job'] = self.textField(text=nerve.Job().GetFilePath('job'), textChangedCommand=self.Refresh)
             cmds.text(u'\u25BC', width=30)
             self.ctrl['recentJobs'] = cmds.popupMenu('test', button=1)
             cmds.setParent('..')
@@ -572,7 +571,7 @@ class Manager(Base):
         args['path'] = self.GetData('path')
         asset = nerve.Asset(**args)
         if asset.Exists():
-            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetDescription())
+            cmds.textField(self.ctrl['desc'], e=True, text=asset.GetLayerData('description'))
         if asset.HasCover():
             cmds.iconTextButton(self.ctrl['cover'], e=True, image=asset.GetCover())
 
@@ -585,15 +584,14 @@ class Manager(Base):
         args['version'] = nerve.String.versionAsInt(versionlist[0])
         asset = nerve.Asset(**args)
 
-        latestFormat = asset.GetLatestFormat()
-        cmds.textField(self.ctrl['latest'], e=True, text=nerve.Format(latestFormat).GetLong())
-
+        #latestFormat = asset.GetLatestFormat()
+        cmds.textField(self.ctrl['latest'], e=True, text=nerve.Format(asset.GetLayerData('format')).GetLong())
 
         # Selected Formats
         if not len(formatlist):
             return False
 
-        format = latestFormat
+        format = asset.GetFormat()
         formats_all = asset.GetFormats()
 
         for f in [nerve.Format(f).GetName() for f in formatlist]:
@@ -603,10 +601,12 @@ class Manager(Base):
         asset.SetFormat(format)
 
         # Get default/latest format variant assetInfo if format not selected, last selected format otherwise
-        assetInfo = asset.GetAssetInfo()
-        cmds.textField(self.ctrl['date'], e=True, text=assetInfo['date'])
-        cmds.textField(self.ctrl['user'], e=True, text=assetInfo['user'])
-        cmds.scrollField(self.ctrl['comment'], e=True, text=assetInfo['comment'] if 'comment' in assetInfo.keys() else '')
+        #assetInfo = asset.GetAssetInfo()
+        #asset.Load()
+        fdata = asset.GetFormatData()
+        cmds.textField(self.ctrl['date'], e=True, text=fdata['date'])
+        cmds.textField(self.ctrl['user'], e=True, text=fdata['user'])
+        cmds.scrollField(self.ctrl['comment'], e=True, text=fdata['comment'] if 'comment' in fdata.keys() else '')
 
     def Refresh_formatlist(self):
         formatlist = self.GetData('formatlist')
@@ -665,7 +665,7 @@ class Manager(Base):
         # Versions
         versions = []
         if asset.Exists():
-            versions = asset.GetVersionsAsString()
+            versions = asset.GetVersions(asString=True)
         # add new version item
         if self.GetData('action') == 'release':
             versions.append('<new>')
@@ -684,11 +684,13 @@ class Manager(Base):
         args['path'] = path if (path and path[-1] == '/') else nerve.String.GetParentPath(path)
         asset = nerve.Asset(**args)
 
+        '''
         # Children
         if '*' in path: # Get Children with Wildcard
             children = asset.GetChildrenByFilter( path.replace('*', '') )
         else: # Get all children
-            children = asset.GetChildren()
+        '''
+        children = asset.GetChildren()
 
         # Add level up
         if path and path != '/' and '/' in path[1:]: # path is set and is not / and is not at root level
@@ -700,7 +702,12 @@ class Manager(Base):
         # Make Assets with Children bold
         for i in range(len(children)):
             args['path'] = path+'/'+children[i]
-            font = 'boldLabelFont' if children[i] and nerve.Asset(**args).HasChildren() else 'plainLabelFont'
+            childAsset = nerve.Asset(**args)
+            if childAsset.HasChildren():
+                font = 'boldLabelFont'
+            else:
+                font = 'plainLabelFont'
+            #font = 'boldLabelFont' if children[i] and nerve.Asset(**args).HasChildren() else 'plainLabelFont'
             cmds.textScrollList(self.ctrl['pathlist'], e=True, lineFont=(i+1, font))
 
         # Reselect

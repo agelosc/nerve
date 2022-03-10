@@ -15,19 +15,19 @@
     {% csrf_token %}
     <div class="container">
         <!-- Selected Asset -->
-        {% if not asset.isGroup %}
+        {% if not asset.IsGroup %}
             {% include "asset.html" %}
         {% endif %}
 
-        {% for asset in asset_list %}
+        {% for asset in asset.GetChildAssets %}
             {% if forloop.first %}<div class="row">{% endif %}
             <div class="col-lg-3 nopadding">
                 <div class="box">
-                    <a href="/assets/?job={{job.path}}&path={{asset.path}}" id="nerve">
+                    <a href="/assets/?job={{job.GetDir}}&path={{asset.GetPath}}" id="nerve">
                         <img class="cover img-fluid" src="{%if asset.hasFindCover%}/image/{{asset.findCover}}{%else%}{%static '/img/default-cover.jpg'%}{%endif%}"/>
                         <div class="overlay">
                             <div class="title-top">
-                                <h1>{{ asset.name }}</h1>
+                                <h1>{{ asset.GetName }}</h1>
                             </div>
                         </div>
                     </a>

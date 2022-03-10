@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block sidebar %}
+<ul>
+    <li class=""><a href="/assets/?job={{job.path}}"><span style='font-weight: bold;'>Assets</span></a></li>
+    <!--
+    <li class=""><a href="/dailies/?job={{job}}"><span>Dailies</span></a></li>
+    <li class=""><a href="/Sequences/?job={{job}}"><span>Sequences</span></a></li> 
+    -->  
+</ul>    
+{% endblock sidebar%}
+
+
+{% block content %}
+    {% csrf_token %}
+    <div class="container">
+        {{ asset.GetJobPath }}
+    </div>
+{% endblock content %}

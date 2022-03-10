@@ -1,6 +1,5 @@
 import os, sys, json
 from re import L
-import logging
 from functools import partial
 
 import nerve
@@ -10,10 +9,6 @@ import maya.mel as mel
 import maya.utils as mu
 
 log = nerve.log
-
-class Test:
-    def __init__(self):
-        log.debug('debug message')
 
 class Path(nerve.Path):
     def __init__(self, path):
@@ -67,28 +62,34 @@ class Job(nerve.Job):
             print('Invalid job path: {}'.format(path)),
             return False
 
-        proj = nerve.Path( job.GetDir() ) + 'maya'
+        proj = nerve.Path( job.GetFilePath('job') ) + 'maya'
         if not proj.Exists():
             print('Maya project not found {}.'.format(proj)),
             return False
 
-        os.environ['JOB'] = job.GetDir()
+        os.environ['JOB'] = job.GetFilePath('job').AsString()
         cmds.workspace(proj.AsString(), openWorkspace=True)
         print('Project set to {}.'.format(proj)),
         return True
 
     def Create(self, addToRecents=True):
         if self.Exists():
+            mayapath = self.GetFilePath('job') + 'maya'
+            if not mayapath.Exists():
+                app = nerve.apps.maya( self.GetFilePath('job') )
+                app.Create()
+
             if addToRecents:
-                self.AddToRecent(self.GetDir())
+                self.AddToRecent(self.GetFilePath('job'))
             return True
+
         # Create Job
         nerve.Job.Create(self)
         # Add To Recent Jobs
         if addToRecents:
-            self.AddToRecent(self.GetDir())
+            self.AddToRecent(self.GetFilePath('job'))
         # Create app directories
-        app = nerve.apps.maya( self.GetDir() )
+        app = nerve.apps.maya( self.GetFilePath('job') )
         app.Create()
 
         return True
@@ -649,8 +650,9 @@ class Alembic(nerve.Asset, Base):
         options+= ' -file {}'.format(filepath)
         for n in cmds.ls(sl=True, l=True):
             options+= ' -root {}'.format(n)
-        if self.data['frameRange']:
-            options+= ' -frameRange {} {}'.format(self.data['frameRange'][0], self.data['frameRange'][1])
+        if 'frameRange' in self.data.keys():
+            frameRange = self.data['frameRange']
+            options+= ' -frameRange {} {}'.format(frameRange[0], frameRange[1])
         options+= ' -dataFormat ogawa'
         #options+= ' -stripNamespaces'
         options+= ' -writeVisibility'
@@ -665,7 +667,7 @@ class Alembic(nerve.Asset, Base):
         cmds.isolateSelect(panel, state=0)
         
         #print('Asset {} released [Alembic]'.format(self.GetPath())),
-
+        self.Create()
         return True
 
     def Reference(self, file=None, **kwargs):
@@ -684,9 +686,9 @@ class Alembic(nerve.Asset, Base):
 
         return cmds.file(file, **args)
 
-    def Import(self, file=None, **kwargs):
-        if not file:
-            file = self.GetFilePath('session')
+    def Import(self, filepath=None, **kwargs):
+        if not filepath:
+            filepath = self.GetFilePath('session')
         options = {}
         options['type'] = 'Alembic'
 
@@ -696,7 +698,7 @@ class Alembic(nerve.Asset, Base):
         args['import'] = True
         args['mergeNamespacesOnClash'] = True
         args['options'] = ';'.join( ['{}={}'.format(key, val) for key,val in options.items()] )
-        return cmds.file(file.AsString(), **args)
+        return cmds.file(filepath.AsString(), **args)
 
     def Replace(self, file=None, **kwargs):
         if file is None:
@@ -734,6 +736,9 @@ class RedshiftProxy(nerve.Asset, Base):
 
         self.AddReleaseMethod('Export')
         self.AddGatherMethod('Import', 'Replace')
+
+        if not cmds.pluginInfo('redshift4maya', q=True, loaded=True):
+            cmds.loadPlugin('redshift4maya')
     
     def Export(self, filepath=None, **kwargs):
         sel = cmds.ls(sl=True, l=True)
@@ -929,8 +934,8 @@ class Maya(nerve.Asset, Base):
         args['options'] = 'v=0'
         cmds.file(file, **args)
 
-        if self.data['materials']:
-            self.ReleaseMaterials()
+        #if self.data['materials']:
+        #self.ReleaseMaterials()
         self.Create()
         return True
 
@@ -1204,7 +1209,7 @@ class USDBase(nerve.Asset, Base):
 
     def Proxy(self, file=None, **kwargs):
         if not file:
-            file = self.GetFilePath('session')        
+            file = self.GetFilePath('session')
         print("CREATE PROXY")
 
     def Replace(self, file=None, **kwargs):
@@ -1710,7 +1715,15 @@ class Material(nerve.Material, Base, MaterialTables):
         nerve.Material.__init__(self, path, **kwargs)
         self.AddReleaseMethod('Export')
         self.AddGatherMethod('Import')
-    
+
+    def GetFormatObjectOLD(self):
+        formatLong = nerve.Format(self.GetFormat()).GetLong()
+        module = sys.modules[__name__]
+        if not hasattr( module, formatLong ):
+            log.error('Module {} does not have a {} object class definition.'.format(__name__, formatLong))
+            return False
+        return getattr( module, formatLong)(**self.data)
+
     @staticmethod
     def GetTexture(texdata, grp=''):
         tex = Node.create('file', texdata['name'])
@@ -1896,3 +1909,6 @@ class Material(nerve.Material, Base, MaterialTables):
             materials.append( material )
 
         return materials
+
+class Texture(nerve.Texture, Base):
+    pass

@@ -5,7 +5,15 @@ import nerve
 
 SAMPLES = nerve.Path('$NERVE_LOCAL_PATH/tests/samples/')
 
-class Utilities(unittest.TestCase):
+
+class testNerve(unittest.TestCase):
+    def NewJob(self):
+        job = nerve.Job()
+        if job.Exists():
+            job.Delete()
+        job.Create()
+        return job
+
     def testPath(self):
         # Expand Environmental Variables
         self.assertEqual( nerve.Path('$TEMP'), os.environ['TEMP'] )
@@ -153,7 +161,6 @@ class Utilities(unittest.TestCase):
         self.assertEqual( nerve.String.UnSnakeCase('snake_case'), 'Snake Case' )
 
     def testImage(self):
-
         image = nerve.Image(SAMPLES+'testSquare.jpg')
         self.assertEqual( image.GetSize(), (512, 512) )
 
@@ -186,7 +193,83 @@ class Utilities(unittest.TestCase):
         image.GetFile().Remove()
         self.assertFalse(image.GetFile().Exists())
 
-class Nerve(unittest.TestCase):
+    def testJob(self):
+        job = nerve.Job()
+        jobpath = nerve.Path( nerve.conf['JOB'] )
+        self.assertEqual( job.GetFilePath('job'), jobpath )
+
+    def testAsset(self):
+        asset = nerve.Asset('A')
+        jobPath = nerve.Path(nerve.conf['JOB'])
+        assetPath = jobPath + nerve.conf['DIR'] + 'assets'
+        if assetPath.Exists():
+            assetPath.Remove(True)
+
+        # Defaults
+        self.assertTrue( isinstance(asset.data['job'], nerve.Path) )
+        self.assertTrue( isinstance(asset.data['path'], nerve.Path) )
+        self.assertEqual( asset.data['job'], jobPath)
+        self.assertEqual( asset.data['path'], 'A')
+
+        # Versions
+        self.assertEqual( asset.GetVersions(), [])
+
+        self.assertEqual( asset.GetVersion(), 1 )
+        self.assertEqual( nerve.Asset('A', version=2).GetVersion(), 2 )
+        self.assertEqual( nerve.Asset('A', version=0).GetVersion(), 1 )
+        self.assertEqual( nerve.Asset('A', version=-1).GetVersion(), 1 )
+        self.assertEqual( nerve.Asset('A').SetVersion(2).GetVersion(), 2 )
+        self.assertEqual( nerve.Asset('A').GetVersionAsString(), 'v001' )
+
+        # Format / Extension
+        self.assertEqual( nerve.Asset('A').GetExtension(), 'usd' )
+        self.assertEqual( nerve.Asset('A').GetFormat(), 'usd' )
+        self.assertEqual( nerve.Asset('A', format='abc').GetExtension(), 'abc')
+        self.assertEqual( nerve.Asset('A', format='abc').GetFormat(), 'abc')
+        self.assertEqual( nerve.Asset('A').SetFormat('abc').GetFormat(), 'abc')
+        self.assertEqual( nerve.Asset('A', format='abc').SetExtension('def').GetFormat(), 'abc' )
+        self.assertEqual( nerve.Asset('A', format='abc').SetExtension('def').GetExtension(), 'def' )
+
+        # File Paths
+        rootPath = jobPath + nerve.conf['DIR'] + 'assets'
+        self.assertEqual( asset.GetFilePath('job'), jobPath) # job 
+        self.assertEqual( asset.GetFilePath('root'), rootPath ) # root
+        self.assertEqual( nerve.Asset('').GetFilePath('root'), rootPath) # root
+        self.assertEqual( nerve.Asset('A/B').GetFilePath('root'), rootPath+'A') # root
+        self.assertEqual( nerve.Asset('A/B/C').GetFilePath('root'), rootPath+'A/B') # root
+
+        self.assertEqual( asset.GetFilePath(), rootPath +'A.usda' ) # main
+        #self.assertEqual( nerve.Asset('').GetFilePath(), rootPath +'default.usda' ) # main
+        self.assertEqual( nerve.Asset('A/B').GetFilePath(), rootPath +'A/B.usda' ) # main
+        self.assertEqual( nerve.Asset('A/B/C').GetFilePath(), rootPath +'A/B/C.usda' ) # main
+        self.assertEqual( nerve.Asset('A').GetFilePath('session'), rootPath + 'A/A_v001.usd' ) # session
+        self.assertEqual( nerve.Asset('A', version=2).GetFilePath('session'), rootPath + 'A/A_v002.usd' ) # session
+        self.assertEqual( nerve.Asset('A/B', version=0).GetFilePath('session'), rootPath + 'A/B/B_v001.usd' ) # session
+        self.assertEqual( nerve.Asset('A').GetFilePath('range'), rootPath + 'A/A_v001/A_v001.{}.usd' ) # range
+        self.assertEqual( nerve.Asset('A/B').GetFilePath('range'), rootPath + 'A/B/B_v001/B_v001.{}.usd' ) # range
+
+        self.assertEqual( nerve.Asset('A').GetFilePath('cover'), rootPath + 'A.png' ) # cover
+
+        # Create
+        asset = nerve.Asset('A')
+        asset.Release()
+        asset = nerve.Asset('A')
+        asset.Release()
+        asset = nerve.Asset('A', version=2, format='usda')
+        asset.Release()
+        self.assertEqual( asset.GetVersions(), [1,2] )
+        self.assertEqual( asset.GetFormats(), ['usd', 'usda'] )
+
+        asset = nerve.Asset('B/C')
+        asset.Release()
+        self.assertEqual( nerve.Asset('B').GetChildren(), ['C'])
+        asset = nerve.Asset('B/D')
+        asset.Release()
+        self.assertEqual( nerve.Asset('B').GetChildren(), ['C', 'D'])
+
+
+
+class NerveOLD(unittest.TestCase):
     def NewJob(self):
         job = nerve.Job()
         if job.Exists():
@@ -226,6 +309,25 @@ class Nerve(unittest.TestCase):
         asset = nerve.Asset('format', version=1)
         #print(asset.GetFormat())
         
+    def testAssets(self):
+        self.NewJob()
+
+        asset = nerve.Asset('A')        
+
+        # version
+        self.assertEqual(asset.data['version'], asset.GetVersion())
+        self.assertEqual(asset.GetVersion(), 1)
+
+        # path
+        self.assertEqual(asset.GetPath(), 'A')
+        self.assertEqual(asset.GetName(), 'A')
+
+        # hierarchy
+        
+
+        self.assertFalse(asset.Exists())
+
+
     def testFindCover(self):
         job = nerve.Job('R:/library')
         hdri = nerve.HDRI(path='HDRI/outdoor/Sky490', version=1, job=job)

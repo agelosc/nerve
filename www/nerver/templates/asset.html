@@ -4,11 +4,11 @@
     <div class="col-lg-4 nopadding">
       <!-- BOX [ -->
       <div class="box">
-        <a href="/assets/?{{ asset.url }}" id="asset-url">
-        <img class="cover img-fluid" src="{% if asset.hasCover %} /image/{{asset.cover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
+        <a href="/assets/?{{ asseturl }}" id="asset-url">
+        <img class="cover img-fluid" src="{% if asset.HasCover %} /image/{{asset.GetCover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
         <div class="overlay">
           <div class="title-top">
-            <h1>{{ asset.name }}</h1>
+            <h1>{{ asset.GetName }}</h1>
           </div>
           <div class="apps">
           </div>
@@ -19,64 +19,67 @@
     <!-- BOX ] -->
     <!-- Details [ -->
     <div class="col assetdata">
-      <!-- Description [-->
       <form>
-        {{ asset|json_script:"asset-data"}}
+        {{ asset.data|json_script:"asset-data"}}
+        <!-- Job Path -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Job</span>
           </div>
-          <input type="text" class="form-control" value="{{asset.job}}" readonly>
-        </div>        
+          <input type="text" class="form-control" value="{{asset.GetJobPath}}" readonly>
+        </div>
+        <!-- Asset Path -->        
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Path</span>
           </div>
-          <input type="text" class="form-control" value="{{asset.path}}" readonly>
-        </div>        
+          <input type="text" class="form-control" value="{{asset.GetPath}}" readonly>
+        </div>
+        <!-- Description -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Description</span>
           </div>
-          <input type="text" class="form-control" value="{{asset.description}}">
+          <input type="text" class="form-control" value="{{asset.GetDescription}}">
         </div>
-
+        <!-- Date -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Date</span>
           </div>
-          <input type="text" class="form-control" id="date" value="{{asset.date}}" readonly>
+          <input type="text" class="form-control" id="date" value="{{asset.GetDate}}" readonly>
         </div>
+        <!-- User -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">User</span>
           </div>
-          <input type="text" class="form-control" id="user" value="{{asset.user}}" readonly>
-        </div>            
+          <input type="text" class="form-control" id="user" value="{{asset.GetUser}}" readonly>
+        </div>
+        <!-- Comments -->     
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Comments</span>
           </div>
-          <textarea class="form-control" id="comment" aria-label="With textarea">{{asset.comment}}</textarea>
+          <textarea class="form-control" id="comment" aria-label="With textarea">{{asset.GetComment}}</textarea>
         </div>
-
+        <!-- Version -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Version</span>
           </div>
-            <!-- Versions Dropdown [ -->
             <div class="dropend">
               <button class="btn btn-primary dropdown-toggle" type="button" id="versions" data-bs-toggle="dropdown" data-bs-auto-close="true">
-                {{ asset.versionAsString }}
+                {{ asset.GetVersionAsString }}
               </button>
               <div class="dropdown-menu">
-                {% for version, versionstr in asset.versions.items %}
+                {% for version, versionstr in asset.GetVersionsDict.items %}
                   <a class="dropdown-item" href="#" data-target="#versions" data-anchor="#asset-url" data-key="version" data-val={{version}}>{{versionstr}}</a>
                 {% endfor %}
               </div>
             </div>
-            <!-- Versions Dropdown ]-->  
-        </div>    
+        </div>
+        <!-- Format -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Format</span>
@@ -84,16 +87,17 @@
             <!-- Format Dropdown [ -->
             <div class="dropend">
               <button class="btn btn-primary dropdown-toggle" type="button" id="formats" data-bs-toggle="dropdown" data-bs-auto-close="true">
-                {{ asset.formatlong }}
+                {{ asset.GetFormatLong }}
               </button>
               <div class="dropdown-menu">
-                {% for format, formatlong in asset.formats.items %}
+                {% for format, formatlong in asset.GetFormatsDict.items %}
                   <a class="dropdown-item" href="#" data-target="#formats" data-anchor="#asset-url" data-key="format" data-val={{format}}>{{formatlong}}</a>
                 {% endfor %}
               </div>
             </div>
             <!-- Format Dropdown ] -->
           </div>
+        </div>
       </form>       
     </div>
     <!-- Details ] -->

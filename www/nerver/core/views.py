@@ -86,8 +86,9 @@ class Action:
     @staticmethod
     def asset(request):
         args = request.POST.get('url')
-        asset = nerve.Asset.url( request.POST.get('url') )
-        return JsonResponse(asset.Serialize(deep=True))
+        asset = nerve.Asset.url( request.POST.get('url') ).Load()
+        print(asset)
+        return JsonResponse( asset.data )
 
     @staticmethod
     def load_app(request):
@@ -104,7 +105,6 @@ class Action:
             return HttpResponse('[{0}] Loading {1}...'.format(date, app))
 
         return HttpResponse('')        
-
 
 class Job(View):
     def get(self, request, *args, **kwargs):
@@ -134,20 +134,26 @@ class Asset(View):
         context = {}
         args = request.GET.dict()
 
-        args['version'] = request.GET.get('version')
-        if not args['version']:
+        if 'version' in args.keys():
+            args['version'] = int(args['version'])
+        else:
             args['version'] = -1
 
-        Asset = nerve.Asset( **args )
+        Asset = nerve.Asset( **args ).Load()
+        context = {'asset':Asset, 'job':Job}
 
-        context['job'] = Job.Serialize()
-        context['asset'] = Asset.Serialize(deep=not Asset.IsGroup())
+        
         urldata = {}
         for key in ['job', 'path', 'version', 'format']:
             if key in request.GET.dict():
                 urldata[key] = args[key]
 
-        context['asset']['url'] = '&'.join([ '{}={}'.format(key, val) for key,val in urldata.items()] )
+        context['asseturl'] = '&'.join([ '{}={}'.format(key, val) for key,val in urldata.items()] )
+        
+        return render(request, "assets.html", context)
+
+        context['job'] = Job.Serialize()
+        context['asset'] = Asset.Serialize(deep=not Asset.IsGroup())
 
         context['asset_list'] = []
         for child in Asset.GetChildren():
