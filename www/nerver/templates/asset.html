@@ -4,11 +4,11 @@
     <div class="col-lg-4 nopadding">
       <!-- BOX [ -->
       <div class="box">
-        <a href="/assets/?{{ asseturl }}" id="asset-url">
+        <a href="/assets/{{ asset.GetUrlVersionFormat }}" id="asset-url">
         <img class="cover img-fluid" src="{% if asset.HasCover %} /image/{{asset.GetCover}} {% else %} {% static '/img/default-cover.jpg' %} {% endif %} " />
         <div class="overlay">
           <div class="title-top">
-            <h1>{{ asset.GetName }}</h1>
+            <h1>{{ asset.GetPrettyName }}</h1>
           </div>
           <div class="apps">
           </div>
@@ -20,13 +20,15 @@
     <!-- Details [ -->
     <div class="col assetdata">
       <form>
+        {% comment %}
         {{ asset.data|json_script:"asset-data"}}
+        {% endcomment %}
         <!-- Job Path -->
         <div class="input-group input-group-sm mb-1">
           <div class="input-group-prepend">
             <span class="input-group-text">Job</span>
           </div>
-          <input type="text" class="form-control" value="{{asset.GetJobPath}}" readonly>
+          <input type="text" class="form-control" value="{{job.GetJobPath}}" readonly>
         </div>
         <!-- Asset Path -->        
         <div class="input-group input-group-sm mb-1">
@@ -73,8 +75,8 @@
                 {{ asset.GetVersionAsString }}
               </button>
               <div class="dropdown-menu">
-                {% for version, versionstr in asset.GetVersionsDict.items %}
-                  <a class="dropdown-item" href="#" data-target="#versions" data-anchor="#asset-url" data-key="version" data-val={{version}}>{{versionstr}}</a>
+                {% for version, versionstr in asset.GetVersionsAsDict.items %}
+                  <a class="dropdown-item" href="/assets/{{asset.GetUrlFormat}}&version={{version}}" data-target="#versions" data-anchor="#asset-url" data-key="version" data-val={{version}}>{{versionstr}}</a>
                 {% endfor %}
               </div>
             </div>
@@ -90,8 +92,8 @@
                 {{ asset.GetFormatLong }}
               </button>
               <div class="dropdown-menu">
-                {% for format, formatlong in asset.GetFormatsDict.items %}
-                  <a class="dropdown-item" href="#" data-target="#formats" data-anchor="#asset-url" data-key="format" data-val={{format}}>{{formatlong}}</a>
+                {% for format, formatlong in asset.GetFormatsAsDict.items %}
+                  <a class="dropdown-item" href="/assets/{{asset.GetUrlVersion}}&format={{ format }}" data-target="#formats" data-anchor="#asset-url" data-key="format" data-val={{format}}>{{formatlong}}</a>
                 {% endfor %}
               </div>
             </div>

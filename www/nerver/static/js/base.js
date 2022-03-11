@@ -1,11 +1,6 @@
 $(document).ready(function(){
     const csrftoken = Cookies.get('csrftoken');
 
-    $('#dragmaya').on('dragstart', function(event){
-        //alert("OK");
-        event.originalEvent.dataTransfer.setData('DownloadURL', 'txt:test:R:/library/test.txt');
-        
-    })
     // Tooltips
     $(function () {
         $('[data-toggle="tooltip"]').tooltip({
@@ -13,7 +8,6 @@ $(document).ready(function(){
             container: 'body'
         })
     })
-    
 
     // Dropdown selection
     function selectDropdown(obj) {
@@ -98,7 +92,7 @@ $(document).ready(function(){
         $('#job-path').val( $(this).data('jobpath') );
 
         event.preventDefault();
-        $('#job-edit').modal('show');
+        //$('#job-edit').modal('show');
 
     });
 

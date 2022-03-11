@@ -809,11 +809,17 @@ class Base:
 
     def SetPrettyName(self, name):
         data = self.LoadCustomLayerData()
-        data['name'] = name
+        if name:
+            data['name'] = name
+        else:
+            del data['name']
         self.SaveCustomLayerData(data)
 
     def GetPath(self):
         return self.data['path']
+
+    def HasCover(self):
+        return self.GetFilePath('cover').Exists()
 
 class Job(Base):
     def __init__(self, job=None, **kwargs):
@@ -822,7 +828,6 @@ class Job(Base):
         if not job:
             job = Path(os.environ['JOB']) if 'JOB' in os.environ.keys() else Path(conf['JOB'])
         
-        log.info(job)
         self.data['job'] = Path(job)
         self.data['path'] = self.data['job'].GetHead()
 
@@ -833,6 +838,8 @@ class Job(Base):
             return self.data['job'] + conf['DIR']
         if key == 'job':
             return self.data['job']
+        if key == 'cover':
+            return self.GetFilePath('root') + 'job.png'
 
     def Create(self):
         from pxr import Usd, UsdGeom
@@ -1048,7 +1055,7 @@ class Asset(Base):
 
     def GetVersion(self):
         # Set and Get Next Version if not set
-        if 'version' not in self.data.keys() or int(self.data['version']) <= 0:
+        if 'version' not in self.data.keys() or int(self.data['version']) == 0:
             versions = self.GetVersions()
             if not len(versions):
                 self.data['version'] = 1
@@ -1056,6 +1063,14 @@ class Asset(Base):
 
             self.data['version'] = versions[-1]+1
             return self.data['version']
+
+        if 'version' in self.data.keys() and self.data['version'] == -1:
+            versions = self.GetVersions()
+            if not versions:
+                self.data['version'] = 0
+                return self.GetVersion()
+                
+            return versions[-1]
 
         return self.data['version']
 
@@ -1168,9 +1183,12 @@ class Asset(Base):
         data['path'] = Path(self.data['path']) + child
         data['job'] = self.data['job']
         return type(self)(**data)
-
-    def HasCover(self):
-        return self.GetFilePath('cover').Exists()
+    
+    def GetChildAssets(self):
+        assets = []
+        for child in self.GetChildren():
+            assets.append( self.GetChildAsset(child) )
+        return assets
 
 class USD(Asset):
     def __init__(self, path, **kwargs):

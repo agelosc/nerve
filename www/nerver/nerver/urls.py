@@ -17,28 +17,13 @@ from django.contrib import admin
 from django.urls import path
 from core import views
 
-'''
-path('', views.jobs, name='jobs'),
-path('assets/', views.assets, name="job"),
-path('asset_add/', views.asset_add, name="asset_add"),
-path('job_app', views.job_app, name='job_app'),
-path('browse', views.browse, name='browse'),
-path('job_add', views.job_add, name='job_add'),
-path('job/<path:job>', views.job, name="job"),
-path('cover/', views.cover, name="cover"),
-
-path('asset/<path:asset>', views.asset, name='asset')
-'''
-
 urlpatterns = [
     #path('admin/', admin.site.urls),
-    path('snippets/', views.snippets, name='snippets'),
-    path('image/<path:path>', views.image, name="image"),
-
     path('', views.Job.as_view()),
     path('assets/', views.Asset.as_view()),
-
     #path('app', views.Action.App, name='app'),
     path('action', views.Action.ajax, name='action'),
+    path('image/<path:path>', views.image, name="image"),
+    path('snippets/', views.snippets, name='snippets')
 
 ]

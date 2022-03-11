@@ -3,7 +3,7 @@
 
 {% block sidebar %}
 <ul>
-    <li class=""><a href="/assets/?job={{job.path}}"><span style='font-weight: bold;'>Assets</span></a></li>
+    <li class=""><a href="/assets/?job={{job.GetJobPath}}"><span style='font-weight: bold;'>Assets</span></a></li>
     <!--
     <li class=""><a href="/dailies/?job={{job}}"><span>Dailies</span></a></li>
     <li class=""><a href="/Sequences/?job={{job}}"><span>Sequences</span></a></li> 
@@ -23,11 +23,11 @@
             {% if forloop.first %}<div class="row">{% endif %}
             <div class="col-lg-3 nopadding">
                 <div class="box">
-                    <a href="/assets/?job={{job.GetDir}}&path={{asset.GetPath}}" id="nerve">
-                        <img class="cover img-fluid" src="{%if asset.hasFindCover%}/image/{{asset.findCover}}{%else%}{%static '/img/default-cover.jpg'%}{%endif%}"/>
+                    <a href="/assets/?job={{job.GetJobPath}}&path={{asset.GetPath}}" id="nerve">
+                        <img class="cover img-fluid" src="{%if asset.HasCover%}/image/{{asset.GetCover}}{%else%}{%static '/img/default-cover.jpg'%}{%endif%}"/>
                         <div class="overlay">
                             <div class="title-top">
-                                <h1>{{ asset.GetName }}</h1>
+                                <h1>{{ asset.GetPrettyName }}</h1>
                             </div>
                         </div>
                     </a>

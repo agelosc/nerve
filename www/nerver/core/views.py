@@ -10,6 +10,7 @@ import os, subprocess
 
 import nerve
 import nerve.apps
+import nerve.django
 
 class Action:
     @staticmethod
@@ -111,46 +112,29 @@ class Job(View):
         job_list = []
         context = {'job_list': job_list}
         for recent in nerve.Job.GetRecent():
-            Job = nerve.Job(recent)
-            job_list.append( Job.Serialize() )
+            Job = nerve.django.Job(recent)
+            
+            job_list.append( Job )
         response = render(request, 'jobs.html', context)
         return response
 
     def post(self, request, *args, **kwargs):
-        job = nerve.Job( request.POST.get('path') )
+        job = nerve.django.Job( request.POST.get('path') )
         job.SetPrettyName( request.POST.get('name') )
         return self.get(request)
 
 class Asset(View):
     def get(self, request):
-        from urllib.parse import quote_plus
-
-        job = request.GET.get('job')
-        Job = nerve.Job(job)
-        if not Job.Exists():
+        job = nerve.django.Job( request.GET.get('job') )
+        if not job.Exists():
             context = {'msg': 'The job requested does not exist.'}
             return render(request, '404.html', context, status=404)
 
-        context = {}
         args = request.GET.dict()
+        args['version'] = int(args['version']) if 'version' in args.keys() else -1
+        asset = nerve.django.Asset( **args )
 
-        if 'version' in args.keys():
-            args['version'] = int(args['version'])
-        else:
-            args['version'] = -1
-
-        Asset = nerve.Asset( **args ).Load()
-        context = {'asset':Asset, 'job':Job}
-
-        
-        urldata = {}
-        for key in ['job', 'path', 'version', 'format']:
-            if key in request.GET.dict():
-                urldata[key] = args[key]
-
-        context['asseturl'] = '&'.join([ '{}={}'.format(key, val) for key,val in urldata.items()] )
-        
-        return render(request, "assets.html", context)
+        return render(request, "assets.html", {'asset':asset, 'job':job})
 
         context['job'] = Job.Serialize()
         context['asset'] = Asset.Serialize(deep=not Asset.IsGroup())
