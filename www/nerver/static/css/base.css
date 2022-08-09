@@ -1,0 +1,54 @@
+body {  font-family: 'Roboto', sans-serif; height: 100%; }
+* {font-family: 'Open Sans', sans-serif; }
+a, a:hover, a:focus { text-decoration: none; }
+a, a:hover, a:focus {color: #aa2200 }
+
+.btn-primary { background-color: #aa2200; border-color: #aa2200; } 
+.btn-primary:hover { background-color: #880000; } 
+.btn-primary:focus { background-color: #880000; } 
+
+hr {color: #000; }
+.nopadding {padding: 0px;}
+
+.header { height: 65px; width: 100%; background-color: #eee; padding: 10px 0px; border-bottom: 1px solid #e2e2e2; }
+.sidebar { height: 100vh;  background-color: #eee; font-size:0.85em; } 
+
+.sidebar ul { list-style-type: none; padding:0px; margin:0px;  }
+.sidebar ul li { border-top: 1px solid #eee;  }
+.sidebar ul li a,strong { font-size: 1em; display:block; padding: 10px 20px; }
+.sidebar ul li a:hover { background: #fff;}
+
+/*.sidebar {  border-right: 1px solid #e2e2e2; }*/
+.box { background-color: #eee; overflow:hidden; position:relative; border-radius: 0px;}
+.box .cover {transition: all 0.2s ease; }
+.box:hover .cover { transform: scale(1.05); }
+.box .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; text-align: center; }
+.box .title { position: relative; top: 50%; transform: translateY(-50%); }
+.box .title h1 { font-size: 1.8em; padding: 0px; margin: 0px; color: #fff; }
+.box .title-top { position: absolute; bottom: 0; left: 0; right: 0; padding: 7px; margin: 3px 3px; background-color: #fff; border-radius: 3px; opacity: 0.3;transition: all 0.2s ease; }
+.box .title-top h1 { font-size: 1.0em; padding: 0px; margin: 0px; color: #000; }
+.box:hover .title-top { margin: 0px; padding: 12px; background-color: #aa2200; opacity: 1.0}
+.box:hover .title-top h1 { color: #fff;}
+
+
+.box:hover .apps { bottom: 0px; }
+.box .apps { transition: all 0.3s ease; padding: 15px; position: absolute; bottom: -64px; width:100%; height: 64px; text-align: left; }
+.box .apps a { padding: 0px 5px; }
+.box .apps .dropdown { display: inline; }
+.box .apps img { transition: all 0.3s ease; }
+.box .apps img:hover { transform: scale(1.2); }
+.box .apps a i { font-size:2em; }
+
+.box:hover .icons { top: 0px; }
+.box .icons { transition: all 0.3s ease; padding: 5px; position: absolute; top: -64px; width:100%; height: 64px; text-align: right;}
+.box .icons a { padding: 0px 5px;}
+.box .icons img { transition: all 0.1s ease; }
+.box .icons img:hover { transform: scale(1.2); }
+
+#tooltip { background-color: #333; color: white; padding:5px 10px; border-radius:4px; font-size: 13px; }
+
+.asset .assetdata { margin-top: 15px; }
+.asset .input-group-prepend { min-width:15%;}
+.asset .input-group-text {height:100%; font-size:0.9em;}
+.asset textarea { min-height: 110px; resize: none; }
+.asset .btn { min-width: 50px; }

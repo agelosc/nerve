@@ -1,0 +1,38 @@
+global proc int
+performFileDropAction (string $theFile)
+{
+	//python("nerve.maya.tools.performFileDropAction(\""+$theFile+"\")");
+	//	return 1;
+	
+	string $msg = "Would you like to Import, Open or Reference the file?";	
+	string $import = "Import";
+	string $open = "Open";
+	string $reference = "Reference";
+	string $cancel = "Cancel";
+	string $response = `confirmDialog -message $msg -button $import -button $open -button $reference -button $cancel -defaultButton $cancel`;
+	if ($response == $cancel)
+	{
+		return(1);
+	} 
+	else if ($response == $open) 
+	{		
+		global string $gv_operationMode;
+		string $save_gv_operationMode = $gv_operationMode;
+		$gv_operationMode = "Open";
+		int $result = performFileAction ($theFile, 1, "");
+		$gv_operationMode = $save_gv_operationMode;
+		return ($result);	
+   	}
+	else if ($response == $import)
+	{
+		file -import -namespace (basenameEx($theFile)) $theFile ;
+		return(1);
+	}
+	else if ($response == $reference)
+	{
+		file -reference -namespace (basenameEx($theFile)) $theFile ;
+		return(1);
+	}
+	
+
+}

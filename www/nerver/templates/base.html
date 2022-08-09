@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Nerver</title>
+    {% include "head.html" %}
+  </head>
+  <body>
+    {% block modal %}{% endblock modal %}
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-lg header">
+          <a href="/"><strong>Nerver</strong></a>
+        </div>
+      </div>
+      
+      <div class="row">
+        <nav class="col-lg-2 nopadding">
+          <div class="sidebar">
+            {% block sidebar %}{% endblock sidebar %}
+          </div>
+        </nav>
+
+        <div class="col-lg-10 nopadding">
+          {% block content %}{% endblock content %}
+        </div>
+
+      </div>
+    </div>
+
+
+  {% include "foot.html" %}
+  </body>
+</html>

@@ -1,0 +1,7 @@
+.vscode
+.vscode/*
+**/__pycache__
+*.pyc
+
+scripts/setup/ImageMagick-7.1.0-21-Q16-HDRI-x64-dll.exe
+scripts/setup/python-3.9.9-amd64.exe

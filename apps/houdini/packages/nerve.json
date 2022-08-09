@@ -1,0 +1,23 @@
+{
+	"env": [
+		{
+			"HOUDINI_OTLSCAN_PATH": {
+				"method":"prepend",
+				"value": ["R:/software/nerve/apps/houdini/hda"]
+			}
+		},
+		{
+			"HOUDINI_MENU_PATH": {
+				"method":"prepend",
+				"value": ["R:/software/nerve/apps/houdini/UI"]
+			}
+		},
+		{
+			"PYTHONPATH": {
+				"method":"prepend",
+				"value": ["R:/software/nerve/lib"]
+			}
+		},		
+		
+	],
+}

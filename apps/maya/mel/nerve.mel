@@ -1,0 +1,4 @@
+global proc nerve()
+{
+	//python("import nerve.maya; nerve.maya.menu()");
+}

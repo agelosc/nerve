@@ -1,0 +1,518 @@
+ // 3d point to 2d pixel.mel
+// David A. Spencer 2/13/2018
+// matrix mult procs by Rob Bredow 2002
+// converts object 3d space coordinates to camera view 2d pixel coordinates
+// based on the specified output image render resolution
+ 
+if (`window -exists dsPnt2PxlWindow`) deleteUI -window dsPnt2PxlWindow;
+
+	// declare and define the UI elements
+string $ui_windw	= `window -t "3d Point to 2d Pixel"  -s true -rtf true dsPnt2PxlWindow`;
+  columnLayout -adj true colmn1;
+	string $frm_lyt		= `formLayout dsPnt2PxlWndwForm`;
+		string $obj_txt		= `text -l "Select objects, vertices, or points to track" -al "center" 
+								-font "obliqueLabelFont" -h 18 dsPnt2PxlObjSelTxt`;
+		string $cam_lbl		= `text -l "Camera" dsPnt2PxlCamFldLbl`;
+		string $cam_fld		= `textField -w 100 -ed false -text "L click for menu" dsPnt2PxlCamTxtfld`;
+
+		string $rendr_lbl	= `text -l "Render Resolution" dsPnt2PxlRenderResTxt`;
+		string $rendr_fldx	= `intField -w 50 dsPnt2PxlRenderResFldx`;
+		string $rendr_fldy	= `intField -w 50 dsPnt2PxlRenderResFldy`;
+		intField  -e -cc "ds_CheckRenderResFieldSync(\"dsPnt2PxlRenderResFldx\", 1)" $rendr_fldx;
+		intField  -e -cc "ds_CheckRenderResFieldSync(\"dsPnt2PxlRenderResFldy\", 0)" $rendr_fldy;
+		intField  -e -rfc "ds_CheckRenderResFieldSync(\"dsPnt2PxlRenderResFldx\", 1)" $rendr_fldx;
+		intField  -e -rfc "ds_CheckRenderResFieldSync(\"dsPnt2PxlRenderResFldy\", 0)" $rendr_fldy;
+		string $pxl_lbl		= `text -l "Pixel Location" dsPnt2PxlPixelLocTxt`;
+		string $pxl_fldx		= `floatField  -precision 1 -ed false -w 80 dsPnt2PxlOutputFldx`;
+		string $pxl_fldy		= `floatField  -precision 1 -ed false -w 80 dsPnt2PxlOutputFldy`;
+
+		string $calc_but	= `button -l "Calculate Pixel Location" -c "ds_GetSelectedPoint" -en false dsPnt2PxlCalBut`;
+		string $cam_menu	= `popupMenu -p $cam_fld -b 1  -pmc "ds_CreateCameraPopupMenu" dsPnt2PxlPopupMenu`;
+		setParent ..;
+	
+	string $optn_layout = `frameLayout -cll true -cl 1 -bv false -l "Output Options" -lv true // -bgc 0 .4 .4
+						    dsPnt2PxlOptnFrmLyt`;
+		columnLayout;
+			string $orgn_rbg	= `radioButtonGrp -nrb 3 -l "Image Origin" ds_Pnt2PxlImageOriginRadButGrp`;
+			string $img_units	= `radioButtonGrp -nrb 2 -l "Image Units"   ds_Pnt2PxlImageUnitsRadButGrp`;
+			string $output_rbg 	= `radioButtonGrp -nrb 3 -l "Output Range" ds_Pnt2PxlImageOuputRadButGrp`;
+			string $output_dest	= `radioButtonGrp -nrb 2 -l "Write Data to" ds_Pnt2PxlOutputOptionRadButGrp`;
+			
+	string $cmd_string = ("ds_ShrinkUIWindow(\""+$optn_layout+"\", \""+$ui_windw+"\")");
+	frameLayout -e -cc $cmd_string $optn_layout;
+	
+	/*	//output format menu not implemented
+	columnLayout -co "left" 110;
+	string $output_menu = `optionMenu -l "Text Format" -w 180 ds_Pnt2PxlOutputOptionMenu`;
+		menuItem -l "x y columns";
+		menuItem -l "3d Equailzer";
+		menuItem -l "Nuke 2d Track";
+		menuItem -l "fcurve";
+		
+		setParent ..;	//columnLayout 
+	*/
+			setParent ..;	//frameLayout
+		setParent ..;	//columnLayout top
+	
+		// instructions frame layout and tab layout;
+	frameLayout -cll true -cl 1 -bv false  -l "Instructions" -lv true //-bgc .3 .0 .0 
+				 ds_Pnt2PxlInstrFrmLayout;
+				
+		string $tabs = `tabLayout` ;
+					
+			string $txt_basic = `scrollField -ed false -ww true ds_pnt2PxlInstructionScrlFld`;
+			string $txt_objects = `scrollField -ed false -ww true `;
+			string $txt_camera = `scrollField -ed false -ww true `;
+			string $txt_output = `scrollField -ed false -ww true `;
+			string $txt_options = `scrollField -ed false -ww true `;
+			string $txt_misc = `scrollField -ed false -ww true `;
+			
+			tabLayout -edit
+         		-tabLabel $txt_basic "Basic" -tabLabel $txt_objects "Objects"
+         		-tabLabel $txt_camera "Camera" -tabLabel $txt_output "Output"
+         		-tabLabel $txt_options "Options" -tabLabel $txt_misc "Misc"
+         		-cc ("ds_ResizeTabWindow(\""+$tabs+"\")")
+         		$tabs;
+         		
+     	// frameLayout open/close commands for resizing UI window to fit
+    $cmd_string = ("ds_ShrinkUIWindow(\"ds_Pnt2PxlInstrFrmLayout\", \""+$ui_windw+"\")");
+	frameLayout -e -cc $cmd_string  ds_Pnt2PxlInstrFrmLayout;
+	frameLayout -e -ec ("ds_ResizeTabWindow(\""+$tabs+"\")")  ds_Pnt2PxlInstrFrmLayout;  		
+
+
+
+	// compare Render Resolution fields with device render values
+global proc ds_CheckRenderResFieldSync(string $fld_name, int $fld_id){
+	
+	int $res;
+	string $name;
+	
+	if($fld_id)	// res field x passed in, value "1"
+		$res = `getAttr defaultResolution.width`;
+	else		// res field y passed in, value "0"
+		$res = `getAttr defaultResolution.height`;
+	int $fld = `intField -q -v $fld_name`;
+	
+	float $clr[3];
+	
+	if ($res == $fld){	// resolution fields match "ok"
+		ds_SetFieldColor($clr, "green");
+		intField -e -bgc $clr[0] $clr[1] $clr[2] $fld_name;
+	}
+	else{										// resolution fields don't match "warning"
+		ds_SetFieldColor($clr, "red");
+		intField -e -bgc $clr[0] $clr[1] $clr[2] $fld_name;
+	}
+}
+
+	// beginnng of calculation procedure - iterate through selection list
+global proc ds_GetSelectedPoint(){
+	string $selected[] = `ls -sl`;
+	string $pnt;
+	
+	if (size($selected)){
+			// print output info header in script console
+		ds_PrintOutputOptionsHeader(0, 0); 
+		
+		for ($pnt in $selected){
+		
+			if ( catchQuiet( `xform -q -ws -t $pnt` ) ) {
+		    	print  ("\nSkipping selection: "+$pnt+"\n");
+		    	print ("Not valid point geometry or transform node.\n\n");
+		    }	
+		    else
+		  		ds_CalcPixelLocation($pnt);
+		}
+	}	
+	else
+		confirmDialog -t "Empty Selection" -m "You must select one or more objects to track." -p dsPnt2PxlWindow;
+}	
+	
+global proc ds_CalcPixelLocation(string $obj){
+	
+		// get image pixel dimensions from UI
+	float $res_w = `intField -q -v dsPnt2PxlRenderResFldx`;
+	float $res_h = `intField -q -v dsPnt2PxlRenderResFldy`;
+	string $cam = `textField -q -text dsPnt2PxlCamTxtfld`;
+	
+	
+	float $res_ar = $res_w/$res_h;	
+	string $flm_fit = `camera -q -filmFit $cam`;
+	float $cam_hfa = `camera -q -hfa $cam`;				//actual camera aperture dim.
+	float $cam_vfa = `camera -q -vfa $cam`;
+	float $cam_ar = $cam_hfa/$cam_vfa;
+	
+	float $adj_hfa = $cam_hfa * 25.4;					//assumes render ar = camera ar
+	float $adj_vfa = $cam_vfa * 25.4;					//apparent film aperture if cam_ar != res_ar
+	int   $ortho = `camera -q -orthographic $cam`;
+	
+	if($ortho){					// camera is orthographic
+		float $orth_w = `camera -q -ow $cam`;
+		$adj_hfa = $orth_w;
+		$adj_vfa = $orth_w;
+		$cam_ar = 1.0;	
+		$fl = 1.0;
+	}
+	
+	int $beg_frm = `currentTime -q`;
+	int $end_frm = $beg_frm;
+	int $range   = `radioButtonGrp -q -sl ds_Pnt2PxlImageOuputRadButGrp`;
+	int $pixels  = `radioButtonGrp -q -sl ds_Pnt2PxlImageUnitsRadButGrp`;
+	
+	int $precision;
+	if ($pixels == 1)		// units option set to pixels
+		$precision = 1;
+	else
+		$precision = 8;		// normalized units 6 decimal places
+	
+	if ($range  == 2){		// animation range slider
+		$beg_frm = `playbackOptions -q -min`;
+		$end_frm = `playbackOptions -q -max`;
+	}
+	else if ($range == 3){	// full animation range
+		$beg_frm = `playbackOptions -q -ast`;
+		$end_frm = `playbackOptions -q -aet`;
+	}
+	else {;}				// current time as initialized
+	
+							// image pixel origin from image top, bottom or centered
+	int $pxl_orgn = ds_ImageOriginOption();
+	float $cntr_offst = 0.5;
+	if(`radioButtonGrp -q -sl ds_Pnt2PxlImageOriginRadButGrp` == 3)
+		$cntr_offst = 0.0;		// Center option
+	
+			// compensate for mismatching camera and render res. aspect ratios  #3
+	if ($cam_ar < $res_ar){
+		if($flm_fit == "vertical" || $flm_fit == "overscan")
+			$adj_hfa = ds_CalcApparentFilmAp($adj_vfa, $res_ar);		// modify horizontal pixel position
+		else
+			$adj_vfa = ds_CalcApparentFilmAp($adj_hfa, (1/$res_ar));	// modify vertical pixel position
+	}
+	else if ($cam_ar > $res_ar){
+		if($flm_fit == "fill" || $flm_fit == "vertical")
+			$adj_hfa = ds_CalcApparentFilmAp($adj_vfa, $res_ar);		// modify horizontal pixel position
+		else
+			$adj_vfa = ds_CalcApparentFilmAp($adj_hfa, (1/$res_ar));	// modify vertical pixel position
+	}
+	else {}	// do nothing, assume default state of equality (almost never, usually off by small fraction)
+
+	int $f = $beg_frm;
+	float $out_x;
+	float $out_y;
+	
+		//data output option, convert to boolean (1 or 0)
+	int $output_optn = (`radioButtonGrp -q -sl ds_Pnt2PxlOutputOptionRadButGrp`) - 1;
+	
+	int $file_id;
+	string $file_name;
+	if ($output_optn){	// write data to text file, setup file management - 1 file per object
+		
+  		string $file_names[] = `fileDialog2 -fileFilter "*.txt" 
+  							-dialogStyle 2 -fileMode 0 -caption ("Select output file for "+$obj)`;
+	  	$file_name = $file_names[0];
+	  	$file_id = fopen($file_name,"w");
+	  	
+		
+	  	if ($file_id == 0) {
+	    	print ("\nCould not open output file, or operation cancelled.\n" + $file_name);
+	    	fclose $file_id;
+	    	return;
+	  	}
+	}
+		// print or write the output header info,  object name, and column titles
+	
+	
+	string $out_string = ("\n# Object : "+$obj+"\n" + 
+							"# frame        x : width        y : height \n\n");
+	if($file_id){
+			//print file header info for each object output file
+		ds_PrintOutputOptionsHeader($output_optn, $file_id); 
+		fprint $file_id $out_string;
+	}
+	else
+		print $out_string;
+	
+	// everything below this level is affected by animation and iterated over time
+	
+	for ($f; $f <= $end_frm; $f++){
+		currentTime $f;
+		
+			// get object worldspace coords  and store in vector
+		float $obj_ws[] = `xform -q -ws -t $obj`;
+		vector $obj_wsv = << $obj_ws[0], $obj_ws[1], $obj_ws[2] >>;
+		
+			// transform the object worldspace 3d coords. to camera local space #1	
+		matrix $cam_mat[4][4] = screenSpaceGetMatrix($cam+".worldInverseMatrix");
+		vector $pnt_cs 		= screenSpaceVecMult($obj_wsv, $cam_mat);
+		
+			// if object local z coincides with camera, results in division by 0
+			// then skip calculation for this frame.
+		if ($pnt_cs.z == 0){
+			print ("Error : frame "+$f+" : bad position - no z depth  \n");
+			continue;
+		}
+			// adjustment for lens principle point (lens center offset)
+		float $fl =  `camera -q -fl $cam`;				//lens focal length
+		float $cam_hfo = `camera -q -hfo $cam`;		//lens x principle point : horizontal film offset
+		float $cam_vfo = `camera -q -vfo $cam`;;		//lens y principle point : vertical film offset
+		float $adj_hfo = ($cam_hfo * 25.4)/$adj_hfa;	// ratio of film offset in mm to adj aperture
+		float $adj_vfo = ($cam_vfo * 25.4)/$adj_vfa;
+		float $cntr_offst_x = $cntr_offst - $adj_hfo;
+		float $cntr_offst_y = $cntr_offst - $adj_vfo*$pxl_orgn;
+		
+		if ($ortho)				// ortho  z has no affect on perspective calc.
+			$pnt_cs = <<$pnt_cs.x, $pnt_cs.y, -1.0>>;
+		
+		float $normal_x = ((($pnt_cs.x/(-$pnt_cs.z))/(($adj_hfa/2.0)/$fl))/2.0 + $cntr_offst_x);
+		float $normal_y = ((($pnt_cs.y/(-$pnt_cs.z))/(($adj_vfa/2.0)/$fl))/((2.0) * $pxl_orgn) + $cntr_offst_y);
+		float $pixel_x = $res_w * $normal_x;
+		float $pixel_y = $res_h * $normal_y;
+		
+		if	($pixels == 1){		// units option pixels
+			
+			$out_x = $pixel_x;
+			$out_y = $pixel_y;
+		}
+		else {					// units option normalized
+			$out_x = $normal_x * $res_ar;
+			$out_y = $normal_y;
+		}
+		
+		// print result output data to console or file
+	$out_string = ("  "+ $f +"   		"+ $out_x + "		" + $out_y +"\n");
+	
+	if($output_optn)
+		fprint $file_id ($out_string);
+	else
+		print ($out_string);
+		
+	}
+		// display result output in gui number fields (last current frame)
+	floatField -e -v $out_x -precision $precision dsPnt2PxlOutputFldx;
+	floatField -e -v $out_y -precision $precision dsPnt2PxlOutputFldy;
+	
+	print ("\n");	
+	if ($file_id){
+		print ("Wrote output file "+$file_name+"\n");
+		print ("Closing output file ID : "+$file_id+"\n"); 
+		fclose $file_id;
+	} 
+
+} // end calc location proc 
+
+global proc float ds_CalcApparentFilmAp(float $ap_dim, float $res_ar){
+		//determines the apparent film aperture if camera and render aspect ratios do not match
+		
+	return ($ap_dim * $res_ar);		
+}
+
+global proc ds_PrintOutputOptionsHeader(int $file_optn, int $file_id){
+	//camera, resolution, image origin
+	string $cam = `textField -q -text dsPnt2PxlCamTxtfld`;
+	int $orgn_slct = `radioButtonGrp -q -sl ds_Pnt2PxlImageOriginRadButGrp`;
+	string $origin[] = `radioButtonGrp -q -labelArray3 ds_Pnt2PxlImageOriginRadButGrp`;
+	int $units_slct = `radioButtonGrp -q -sl ds_Pnt2PxlImageUnitsRadButGrp`;
+	string $units[] = `radioButtonGrp -q -labelArray2 ds_Pnt2PxlImageUnitsRadButGrp`;
+	int $res_w = `intField -q -v dsPnt2PxlRenderResFldx`;
+	int $res_h = `intField -q -v dsPnt2PxlRenderResFldy`;
+	
+	if($file_optn){		// write to text file
+		fprint $file_id ("# Image Resolution : "+$res_w+ " x "+$res_h+"\n");
+		fprint $file_id ("# Image Origin : "+$origin[$orgn_slct - 1]+"\n");
+		fprint $file_id ("# Image Units  : "+$units[$units_slct - 1]+"\n");
+		fprint $file_id ("# Camera : " +$cam+"\n");
+	}
+	else{				// print to console
+		print ("\n");
+		print ("# Image Resolution : "+$res_w+ " x "+$res_h+"\n");
+		print ("# Image Origin : "+$origin[$orgn_slct - 1]+"\n");
+		print ("# Image Units  : "+$units[$units_slct - 1]+"\n");
+		print ("# Camera : " +$cam+"\n");
+	}
+}
+
+global proc int ds_ImageOriginOption(){	//sets the image origin variable
+	
+	if (`radioButtonGrp -q -sl ds_Pnt2PxlImageOriginRadButGrp` == 1)
+		return (-1);				// top image origin
+	else 
+		return 1;					// bottom Image origin or center origin 
+	
+}
+	
+global proc ds_CreateCameraPopupMenu(){
+		// list all scene cameras, get camera transform nodes - not camShapes
+	string $cameras[] = `listCameras`;
+	string $cam;
+	popupMenu -e -deleteAllItems dsPnt2PxlPopupMenu;
+	
+	for ($cam in $cameras){ 
+		if(`objectType $cam` == "camera"){				 // object is a cameraShape
+			string $parent[] = `listRelatives -p $cam`; // get the object's parent transform
+			$cam = $parent[0];
+		}
+		
+		menuItem -l $cam -p dsPnt2PxlPopupMenu  -c ("ds_CameraPopupMenuSelected(\""+$cam+"\")");
+	}
+}	
+
+global proc ds_CameraPopupMenuSelected(string $camera){
+	float $clr[3];
+	ds_SetFieldColor($clr, "green");
+	textField -e -text  $camera  -bgc $clr[0] $clr[1] $clr[2]  dsPnt2PxlCamTxtfld;
+	button -e -enable true dsPnt2PxlCalBut;	//enable the calc button upon a valid camera selection
+}
+
+global proc ds_SetFieldColor(float $val[], string $color){
+	float $red[] = {0.3, 0.0, 0.0};						// valid data status colors of text field
+	float $green[] = {0.0, 0.2, 0.0 };
+	float $yellow[] = {0.8, 0.6, 0.1};
+	float $blue[] = {0.1, 0.1, 0.2};
+	
+	switch ($color){
+		case "green":
+			$val = $green;
+			break;
+		case "red":
+			$val = $red;
+			break;
+		case "yellow":
+			$val = $yellow;
+			break;
+		case "blue":
+			$val = $blue;
+			break;
+	}
+}
+	// special proc needed to resize window to fit after collapsing a frameLayout
+global proc ds_ShrinkUIWindow(string $layout, string $window){
+	int $hgt = (`frameLayout -q -h $layout` - 20);	// collapsed title bar is 20 pnts high
+//print ("frameLayout ht = "+$hgt+"\n");	
+	int $w_hgt = `window -q -h $window`;
+//print ("Expanded wndw ht = "+$w_hgt+"\n");	
+	window -e -h ($w_hgt - $hgt) $window;
+}
+	// resize UI window when a new tab is selected to fit tab scrollfield text
+global proc ds_ResizeTabWindow(string $tab_lyt){
+	int $index = `tabLayout -q -selectTabIndex $tab_lyt`;
+	string $scrl_fld[] = `tabLayout -q -childArray $tab_lyt`;
+	string $text = `scrollField -q -text $scrl_fld[$index-1]`;
+	int $chars = size($text);
+
+	int $font_size = `scrollField -q -fns $scrl_fld[$index-1]`;
+	int $scrl_hgt = ($chars/76) * $font_size;
+
+	tabLayout -e -h ($scrl_hgt + 23) $tab_lyt;	//tab layout tab header is 23 points high
+	window -e -h ($scrl_hgt+223) dsPnt2PxlWindow;	// default window is 200 points, tabs are 23 pnts
+}
+
+global proc ds_ErrorDialogAlert( ){
+		
+	
+}
+
+	// Get a matrix
+	// accepts the camera worldInverseMatrix attribute, and places it into a one dimensional array
+	// then create a 4x4 matrix by loading in the array values one at a time
+	// the data must be in a multi-dimensional array or matrix form to perform matrix multiplication.
+
+global proc matrix screenSpaceGetMatrix(string $attr){
+  float $v[]=`getAttr $attr`;
+  matrix $mat[4][4]=<<$v[0], $v[1], $v[2], $v[3];
+             $v[4], $v[5], $v[6], $v[7];
+             $v[8], $v[9], $v[10], $v[11];
+             $v[12], $v[13], $v[14], $v[15]>>;
+ return $mat;
+}
+
+	// Multiply the object point vector by the 4x4 camera worldInverseMatrix m, 
+	// the 3d point vector must be loaded into a matrix variable to perform matrix multiplication
+	// a matrix is the result and then returned in 1 x 3 vector form.
+
+global proc vector screenSpaceVecMult(vector $v, matrix $m){
+  matrix $v1[1][4]=<<$v.x, $v.y, $v.z, 1>>;
+  matrix $v2[1][4]=$v1*$m;
+  return <<$v2[0][0], $v2[0][1], $v2[0][2]>>;
+}
+
+	// format the UI
+formLayout -e 
+	-af $obj_txt	left 0
+	-af $obj_txt	right 0
+	-af $obj_txt	top 10
+
+	-ap $cam_lbl	right 65 50
+	-ac $cam_lbl	top 10	$obj_txt
+	-ap $cam_fld	left -55 50
+	-af $cam_fld	right  120
+	-aoc $cam_fld	top -2	$cam_lbl
+	
+	-ac $rendr_lbl	top 10	$cam_fld
+	-ap $rendr_lbl	right 65 50 
+	-ap $rendr_fldx 	right 3 50	
+	-aoc $rendr_fldx	top -3	$rendr_lbl
+	-ap $rendr_fldy 	left 3 50	
+	-aoc $rendr_fldy	top -3	$rendr_lbl
+	
+	-ap $pxl_lbl	right 90	50 
+	-ac $pxl_lbl	top 10 $rendr_fldx
+	-ap $pxl_fldx	right 3 50	
+	-aoc $pxl_fldx	top -3	$pxl_lbl
+	-ap $pxl_fldy	left 3 50	
+	-aoc $pxl_fldy	top -3	$pxl_lbl
+	
+	-ap $calc_but	left 0 20
+	-ap $calc_but	right 0 80
+	-ac $calc_but 	top 15	$pxl_fldx
+	
+	-h 158 -w 415
+	$frm_lyt;
+
+radioButtonGrp -e -l1 "Top Left" -l2 "Bottom Left" -l3 "Center"
+				-sl 1 -cw 1 100 -cat 1 "left" 5 -cat 2 "left" 0 $orgn_rbg;
+radioButtonGrp -e -l1 "Pixels" -l2 "Normalized" 
+				-sl 1 -cw 1 100 -cat 1 "left" 5 -cat 2 "left" 0 $img_units;				
+radioButtonGrp  -e -nrb 2 -l1 "Current Frame" -l2 "Range Slider" -l3 "All Frames"
+				-sl 1 -cw 1 100 -cat 1 "left" 5 -cat 2 "left" 0  $output_rbg;			
+radioButtonGrp -e -l1 "Script Console" -l2  "Text File"
+				-sl 1 -cw 1 100 -cat 1 "left" 5 -cat 2 "left" 0 $output_dest;	
+				
+	// set control alert colors for UI
+float $clr[3];
+ds_SetFieldColor($clr, "yellow");
+text -e -bgc $clr[0] $clr[1] $clr[2] $obj_txt;
+ds_SetFieldColor($clr, "red");
+textField -e -bgc $clr[0] $clr[1] $clr[2] $cam_fld;
+ds_SetFieldColor($clr, "blue");
+floatField -e -bgc $clr[0] $clr[1] $clr[2] $pxl_fldx;
+floatField -e -bgc $clr[0] $clr[1] $clr[2] $pxl_fldy;
+
+
+	// get the render device output pixel dimensions 
+int $res_w = `getAttr defaultResolution.width`;
+int $res_h = `getAttr defaultResolution.height`;
+
+intField -e -v $res_w  $rendr_fldx;
+intField -e -v $res_h  $rendr_fldy;
+
+	// set the render resolution fields color sync
+ds_CheckRenderResFieldSync($rendr_fldx, 1);
+ds_CheckRenderResFieldSync($rendr_fldy, 0);				
+				
+	// populate the Instruction tabs with text docs in dsPoint2PixelDoc.mel		
+string $usr_doc = dsPoint2PixelDoc("basic");			
+scrollField -e -text $usr_doc -fn "plainLabelFont" -fns 18 $txt_basic;
+$usr_doc = dsPoint2PixelDoc("objects");			
+scrollField -e -text $usr_doc -fn "plainLabelFont" -fns 18 $txt_objects;
+$usr_doc = dsPoint2PixelDoc("camera");			
+scrollField -e -text $usr_doc -fn "plainLabelFont" -fns 18 $txt_camera;
+$usr_doc = dsPoint2PixelDoc("output");			
+scrollField -e -text $usr_doc -fn "plainLabelFont" -fns 18 $txt_output;
+$usr_doc = dsPoint2PixelDoc("options");			
+scrollField -e -text $usr_doc -fn "plainLabelFont" -fns 18 $txt_options;
+$usr_doc = dsPoint2PixelDoc("misc");			
+scrollField -e -text $usr_doc -fn "plainLabelFont" -fns 18 $txt_misc;
+
+
+windowPref -e -wh 417 200 $ui_windw;
+showWindow $ui_windw;

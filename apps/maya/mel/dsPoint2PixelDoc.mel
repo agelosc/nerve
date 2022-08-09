@@ -1,0 +1,119 @@
+// 3d_point_to_2d_pixel.mel - user documentation 
+// script documentation commented at the bottom
+// string variables contain documentation specific to the function
+// sourced from 3d_point_to_2d_pixel.mel
+
+
+global proc string dsPoint2PixelDoc(string $doc){
+
+string $basic = "    Determines the location of a 3d object in the 2d image space of a chosen camera viewpoint.\n"+
+" - Select one or more objects in the scene.\n"+
+" - Select the camera viewpoint from the camera popup menu by left\n    mouse clicking in the \"Camera\" textfield.\n"+ 
+" - Enter the target image pixel resolution in the \“Render Resolution\”\n    number fields.\n"+
+" - Click the \"Calculate Pixel Location\" button and read the result from\n    the \"Pixel Location\""+
+" number fields or a detailed output in the Script\n    Console."+
+"                                                                                                              "+
+"                                                                ";
+
+string $objects = "    Select any object containing transformation data including: • transform node •"+
+" poly-mesh vertex • nurbs cv • bezier curve cv • edit point • armature joint •"+
+" particle • emitter • locator.    Any number or combination of objects can be selected at a time to evaluate"+
+" through a specified camera.\n\n    The \"Pixel Location\" fields display the current position of the last"+
+" object in the selection, so is only for quick reference to a single object at a single frame."+
+"                                                                                                              ";
+
+string $camera = "    The selected camera viewpoint can be a perspective or orthographic camera,"+
+" or a \"Look-through\" camera of a light or other object.  The Camera popup menu displays all camera objects"+
+" currently existing in the scene which can be selected as an image viewpoint.                            \n\n"+
+"    The lens principle point, or lens center offset, is accomodated in the calculation.  This property is reflected"+
+" in the camera \"Film Offset\" x and y attributes.  An animated Film Offset is also accomodated."+
+"                                                                                                          ";    
+
+string $output = "    The default Render Resolution is copied from the current Device Render Resolution in"+
+" the Render Settings window.  These values can be changed to any desired image dimensions and do not need to"+
+" match the Device render settings.  When either value deviates from the Device values, the number field turns"+
+" red to indicate a mis-match.  This is only a warning that the calculated output dimensions do not reflect"+
+" the current render output values, but does not impair the result of the calculation.\n\n    Be aware that the"+
+" calculated output pixel values are only valid for the image resolution displayed in the tool gui."+
+"  You can output for any image dimensions as long as your eventual target resolution for the data is the same."+
+"  Assumes only square pixels for the output target image.";
+
+string $options = "    The pixel location can be expressed in an orientation based on an image origin"+
+" at Top Left, Bottom Left, or image Center.\n\n    The object location in the image can be expressed in Pixels or"+
+" Normalized values.  Normalization is based on the image aspect ratio with the Y dimension ranging from 0 to 1,"+
+" and the X dimension ranging from 0 to the aspect ratio. Centered Normalized values are 1/2 the aspect ratio"+
+" dimensions negative to positive.  Pixel values are truncated to the nearest tenth for easier evaluation."+
+"\n\n    The Output Range is set to Current Frame by default, which results in a single output value for x and y dimensions."+
+"  Animated objects can be evaluated through the range of animation established by either the animation"+
+" \"Range Slider\" or \"All Frames\" set in the animation timeline.\n\n    The range of data representing the animation"+
+" frames is output to the Script Console by default, or can be written out to text files - one file for each"+
+" selected object being evaluated.   When output to \"Text File\" is selected, a file browser will appear after the"+
+" Calculation button is pressed, in which the file name and location can be entered.  The current object name is"+
+" displayed in the title bar of the browser window for reference."+
+"                                                   ";
+
+string $misc = "    The Camera aspect ratio and Render Device aspect ratio can deviate from each other."+
+"  The camera \"Film Fit\" options will determine how the render output frame fits within the camera aperture and"+
+" vise versa.  The various options: \"Fill\", \"Horizontal\", \"Vertical\", or \"Overscan\" will affect the angle"+
+" of view captured within the render window, and thus, the apparent positions of selected objects within the rendered"+
+" view.  Be aware of these settings when camera and Render Resolution aspect ratios do not agree."+
+"\n\n    In most instances, the camera and render aspect ratios will be the same, but this tool permits the flexibility"+
+" to explore desired camera and render device combinations without altering their attributes."+
+"                                   ";
+
+string $rtrn_str;
+
+	switch ($doc){
+		case "basic":
+			$rtrn_str = $basic;
+			break;
+		case "objects":
+			$rtrn_str = $objects;
+			break;
+		case "camera":
+			$rtrn_str = $camera;
+			break;
+		case "output":
+			$rtrn_str = $output;
+			break;
+		case "options":
+			$rtrn_str = $options;
+			break;
+		case "misc":
+			$rtrn_str = $misc;
+			break;
+	}
+
+return $rtrn_str;
+}
+
+
+
+//    Details of code function
+// #1 transform the object worldspace 3d coords. to camera local space
+// multiply the obj_vector by the worldInverseMatrix of the camera
+// multiplying the camera by its own worldInverseMatrix would sends the camera back to the world origin
+// so multiplying the 3d point by the camera worldInverseMatrix will transform it to that same space 
+// as if the camera was at the world origin.  Even tho the camera is not reoriented, it makes the math work out.
+
+// #2 pointMatrixMult (not used in this script) is a strange function since it multiplies a 1x3 vector by a 4x4 matrix
+// and ignores the bottom row of the matrix, which contains the translation data.
+// since matrix data is output in vector form, it is ordered transposed from typical matrix convention
+// with the translation vector in the 4th row rather than the 4th column
+// so the vector is transposed as a row and mutiplied by the matrix in reverse order.
+// the translation row must be added back into the output vector for a proper point translation result
+
+// #3 code should be independent from resolution gate film fit.  Change vertical or horizontal angle of view
+// depending on Fit Resolution Gate setting “Fill, Horizontal, Vertical, Overscan” 
+// the “apparent” camera vertical or horizontal film aperture dimension will be changed to match the 
+// aspect ratio of the desired render resolution 
+// The actual camera aperture dimensions are not changed, only the variable representing the h or v dimension.
+// if camera ar < render ar, and Fit Resolution Gate = Vertical or Overscan, then change camera horiz. film ap dimension
+// if camera ar < render ar, and Fit Resolution Gate = Horizontal or Fill, then change camera vertical film ap dimension
+// if camera ar > render ar, and Fit Resolution Gate = Vertical or Fill, then change camera horiz. film ap dimension
+// if camera ar > render ar, and Fit Resolution Gate = Horizontal or Overscan, then change camera vertical film ap dimension
+// This permits flexibility in application of various cameras and render outputs without constraining one to the other.
+// It permits experimentation and frees the user from constantly maintaining correspondence between camera and render device.
+// User must only be aware that the final track pixel output dimensions match the render output.
+// future options could be an interactive output based on realtime manipulation of camera or objects ??
+//

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block sidebar %}
+<ul>
+    <li class=""><a href="/assets/?job={{job.GetJobPath}}"><span style='font-weight: bold;'>Assets</span></a></li>
+    <!--
+    <li class=""><a href="/dailies/?job={{job}}"><span>Dailies</span></a></li>
+    <li class=""><a href="/Sequences/?job={{job}}"><span>Sequences</span></a></li> 
+    -->  
+</ul>    
+{% endblock sidebar%}
+
+{% block content %}
+    {% csrf_token %}
+    <div class="container">
+        <!-- Selected Asset -->
+        {% if not asset.IsGroup %}
+            {% include "asset.html" %}
+        {% endif %}
+
+        {% for asset in asset.GetChildAssets %}
+            {% if forloop.first %}<div class="row">{% endif %}
+            <div class="col-lg-3 nopadding">
+                <div class="box">
+                    <a href="/assets/?job={{job.GetJobPath}}&path={{asset.GetPath}}" id="nerve">
+                        <img class="cover img-fluid" src="{%if asset.HasCover%}/image/{{asset.GetCover}}{%else%}{%static '/img/default-cover.jpg'%}{%endif%}"/>
+                        <div class="overlay">
+                            <div class="title-top">
+                                <h1>{{ asset.GetPrettyName }}</h1>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            {% if forloop.counter|divisibleby:4 %}</div><div class="row">{% endif %}
+            {% if forloop.last %}</div>{% endif %}
+        {% endfor %}
+    </div>
+{% endblock content %}
+
+{% block modal %}
+    <!-- Edit Job -->
+    <div class="container-fluid">
+        <form method="post">
+        {% csrf_token %}
+        
+        <div class="modal fade" id="asset-view" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Asset</h5>
+                        <button type="button" class="btn-close modal-dismiss" data-dismiss="#asset-view" aria-label="Close"></button>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="asset">
+
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm modal-dismiss" data-dismiss="#asset-view">Close</button>
+                        <input type="submit" value='Submit' class="btn btn-primary btn-sm">
+                    </div>
+                </div>
+            </div>
+        </div>  
+        </form>
+    </div>
+{% endblock modal %}
