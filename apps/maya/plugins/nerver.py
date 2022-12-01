@@ -72,7 +72,8 @@ class PyExternalDropCallback(OpenMayaUI.MExternalDropCallback):
                     data[key] = val
 
                 asset = nerve.Asset(**data)
-                sys.stdout.write(asset)
+                #sys.stdout.write(asset)
+                nerve.maya.UI.Manager(action='gather', **data)
                 
                 #sys.stdout.write(data)
 

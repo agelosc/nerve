@@ -115,8 +115,11 @@ def clearNamespaces():
                 namespaces.append(t)
 
         for ns in namespaces:
-            cmds.namespace(mv=[ns, ":"], force=True)
-            cmds.namespace(rm=ns)
+            try:
+                cmds.namespace(mv=[ns, ":"], force=True)
+                cmds.namespace(rm=ns)
+            except:
+                print(ns + ' namespace could not be removed.')
 
         tmp = cmds.namespaceInfo(listOnlyNamespaces=True)
         c=c+1
@@ -330,8 +333,6 @@ def SetLinearColorManagement():
     cmds.colorManagementPrefs(e=True, renderingSpaceName='scene-linear Rec.709-sRGB')
     cmds.evalDeferred( 'cmds.colorManagementPrefs(e=True, viewTransformName="Un-tone-mapped (sRGB)")')
     cmds.rsColorManagement(attributeChanged="workingSpaceName")
-    
-
 
 def SetACESColorManagement():
     
@@ -339,6 +340,117 @@ def SetACESColorManagement():
     cmds.evalDeferred( 'cmds.colorManagementPrefs(e=True, viewTransformName="ACES 1.0 SDR-video (sRGB)")')    
     cmds.rsColorManagement(attributeChanged="workingSpaceName")
 
+def renameMaterial():
+    import maya.cmds as cmds
+    name = nerve.maya.UI.Dialog.Input()
+    if name:
+        sel = cmds.ls(sl=True)
+        mat = nerve.maya.Node.GetMaterials()
+        for m in mat:
+            sg = nerve.maya.Node.GetShadingEngines(m)
+            cmds.rename(m, name+'_M')
+            for s in sg:
+                cmds.rename(s, name+'_SG')
+
+
+# Modeling
+def centerPivots():
+    for n in cmds.ls(sl=True, l=True, type='transform'):
+        cmds.xform(n, centerPivots=True)
+
+def centerPivotAtBase():
+    import maya.api.OpenMaya as om
+
+    for n in cmds.ls(sl=True, l=True, type='transform'):
+        bbox = cmds.xform(n, q=True, a=True, ws=True, boundingBox=True)
+        min = om.MVector((bbox[0], bbox[1], bbox[2]))
+        max = om.MVector((bbox[3], bbox[4], bbox[5]))
+        height = (max.y - min.y)*0.5
+        pos = om.MVector(cmds.xform(n, q=True, ws=True, t=True))
+        center = min+((max-min)*0.5)
+        cmds.xform(n, ws=True, piv=(center[0], center[1]-height, center[2]))    
+        #offset = (center-pos)*-1
+        #cmds.xform(n, ws=True, t=(offset[0], offset[1]+height, offset[2]))
+        #cmds.makeIdentity(n, apply=True, t=True, r=True, s=True, n=True, pn=True)
+
+        
+def centerPivotAtBaseAndGrid():
+    import maya.api.OpenMaya as om
+
+    for n in cmds.ls(sl=True, l=True, type='transform'):
+        bbox = cmds.xform(n, q=True, a=True, ws=True, boundingBox=True)
+        min = om.MVector((bbox[0], bbox[1], bbox[2]))
+        max = om.MVector((bbox[3], bbox[4], bbox[5]))
+        height = (max.y - min.y)*0.5
+        pos = om.MVector(cmds.xform(n, q=True, ws=True, t=True))
+        center = min+((max-min)*0.5)
+        cmds.xform(n, ws=True, piv=(center[0], center[1]-height, center[2]))    
+        offset = (center-pos)*-1
+        cmds.xform(n, ws=True, t=(offset[0], offset[1]+height, offset[2]))
+        #cmds.makeIdentity(n, apply=True, t=True, r=True, s=True, n=True, pn=True)        
+
+def freezePivot():
+    cmds.xform(ws=True, piv=(0,0,0))
+
+def freezeTransforms():
+    #makeIdentity -apply true -t 1 -r 1 -s 1 -n 0 -pn 1;
+    for n in cmds.ls(sl=True, l=True, type='transform'):
+        cmds.makeIdentity(n, apply=True, t=True, r=True, s=True, n=False, preserveNormals=True )
+
+def freezeTransformsNoScale():
+    #makeIdentity -apply true -t 1 -r 1 -s 1 -n 0 -pn 1;
+    for n in cmds.ls(sl=True, l=True, type='transform'):
+        cmds.makeIdentity(n, apply=True, t=True, r=True, s=False, n=False, preserveNormals=True )
+
+
+def mergeVertices():
+    sel = cmds.ls(sl=True)
+    oldcount = cmds.polyEvaluate(sel, v=True)
+    for n in cmds.ls(sl=True, l=True, type='transform'):
+        #polyMergeVertex  -d 0.001 -am 1 -ch 1 pCube2;
+        cmds.polyMergeVertex(n, d=0.001, am=True, ch=True)
+
+    cmds.select(sel, r=True)
+    newcount = cmds.polyEvaluate(sel, v=True)
+    msg = str(oldcount-newcount) + ' pairs of vertices were merged.'
+    nerve.maya.UI.Dialog.Confirm(msg)
+
+def extrude():
+    import maya.mel as mel
+    mel.eval('performPolyExtrude 0')
+
+def edgeLoop():
+    import maya.mel as mel
+    mel.eval('SplitEdgeRingTool')
+
+def flattenUVSets():
+    sel = cmds.ls(sl=True, l=True)
+    for n in sel:
+        t,s = nerve.maya.Node.GetDagTuple(n)
+        # To query the current uv set.
+        uvSets = cmds.polyUVSet(s,q=True, allUVSets=True)
+        if 'map1' not in uvSets:
+            cmds.polyUVSet(s, create=True, uvSet='map1' )
+        for uvSet in uvSets:
+            if uvSet == 'map1':
+                continue
+            cmds.polyCopyUV(s, uvSetNameInput=uvSet, uvSetName='map1', ch=False)
+    #        cmds.polyUVSet(s, copy=True, nuv='map1', uvSet=uvSet )
+            cmds.polyUVSet(s, delete=True, uvSet=uvSet)    
+
+def bevel():
+    #sel = cmds.ls(sl=True, l=True)
+    bevels = []
+    for n in cmds.ls(sl=True, l=True):
+        bevel = cmds.polyBevel3(n, offset=0.5, offsetAsFraction=True, autoFit=True, segments=1, worldSpace=True, smoothingAngle=30, depth=1, mitering=0, miterAlong=0, chamfer=True, subdivideNgons=True, mergeVertices=True, mergeVertexTolerance=0.0001, miteringAngle=180, angleTolerance=180)
+        bevels+=bevel
+    cmds.select(bevels, r=True)
+
+def resetNormals():
+    sel = cmds.ls(sl=True, l=True)
+    import maya.mel as mel
+    mel.eval('UnlockNormals;expandPolyGroupSelection;polySetToFaceNormal;polyPerformAction "polySoftEdge -a 30" e 0;')
+    cmds.select(sel, r=True)
 
 # Redshift
 def rsRelease():
@@ -749,3 +861,53 @@ def localRender(renderLayer=False, run=True):
         batfile.close()
 
         os.system('start "" '+batfilepath+'')
+
+
+def repathTextures():
+    targetPath = 'N:/jobs/dallas/krotiri/maya/assets/plants/Maxtree - Plant Models Vol. 23olea\MT_PM_V23_Maps/'
+    filenames = []
+    for f in nerve.Path.Glob(targetPath + '/*.*'):
+        f = nerve.Path(f)
+        filenames.append(f.GetHead())
+
+    nodetypes = {'file':'fileTextureName', 'RedshiftNormalMap':'tex0', 'RedshiftSprite':'tex0'}
+    for ntype, attr in nodetypes.items():
+        for n in cmds.ls(type=ntype):
+            inpath = nerve.Path( cmds.getAttr(n + '.'+attr) )
+            filename = inpath.GetHead()
+            if filename in filenames:
+                cmds.setAttr(n + '.' + attr, targetPath+'/'+filename, type='string')
+            else:
+                print('{} not found.'.format(filename))
+
+            
+                
+
+def createQuickLightSetup():
+
+    
+    cmds.file("N:/library/input/QuickLightSetup.mb", i=True, type='MayaBinary', ignoreVersion=True, ra=True, mergeNamespacesOnClash=False, namespace='QLS', pr=True)
+
+    '''
+    dome = nerve.maya.Node.create('RedshiftDomeLight', 'DOME')
+    dome = nerve.maya.Node.GetDagTuple(dome)
+    cmds.setAttr(dome[1] + '.tex0', 'N:\library\input\hdri\3_3DCollective - Real Light 24HDRi Pro Pack 03\4K\3DCollective_HDRi_093_1746_4K.hdr', type='string')
+    cmds.setAttr(dome[1] + '.background_enable', False)
+
+    area = nerve.maya.Node.create('RedshiftPhysicalLight', 'AREA')
+    area = nerve.maya.Node.GetDagTuple(area)
+    
+    cmds.setAttr(area[0] + '.tz', 500)
+    cmds.setAttr(area[0] + '.sx', 100)
+    cmds.setAttr(area[0] + '.sy', 100)    
+    cmds.setAttr(area[0] + '.sz', 100)
+    
+    cmds.setAttr(area[1] + '.areaVisibleInRender', False)
+    cmds.setAttr(area[1] + '.intensity', 10)
+    
+    grp = cmds.group(em=True, n='Area_grp')
+    area = cmds.parent(area[0], grp)
+    
+    cmds.setAttr(grp + '.rx', -27)
+    cmds.setAttr(grp + '.ry', 45)    
+    '''

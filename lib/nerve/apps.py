@@ -75,6 +75,6 @@ class maya(Base):
         txt = '@echo off\n'
         txt+= 'set JOB={}\n'.format(self.GetJob())
         txt+= 'set MAYA_PROJECT={}\n'.format(self.GetAppPath())
-        txt+= 'set MAYA_MODULE_PATH=%MAYA_MODULE_PATH%;%NERVE_LOCAL_PATH%/maya\n'
+        txt+= 'set MAYA_MODULE_PATH=%MAYA_MODULE_PATH%;%NERVE_LOCAL_PATH%/apps\maya\n'
         txt+= 'start "" "C:/Program Files/Autodesk/Maya2022/bin/maya.exe" -command nerve\n'
         return txt

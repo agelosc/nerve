@@ -1,9 +1,11 @@
-global proc int
-performFileDropAction (string $theFile)
+global proc int _performFileDropAction (string $theFile)
 {
-	//python("nerve.maya.tools.performFileDropAction(\""+$theFile+"\")");
-	//	return 1;
+	//print $theFile;
+	//return 1;
+	python("nerve.maya.tools.performFileDropAction(\""+$theFile+"\")");
+	return 1;
 	
+	/*
 	string $msg = "Would you like to Import, Open or Reference the file?";	
 	string $import = "Import";
 	string $open = "Open";
@@ -33,6 +35,6 @@ performFileDropAction (string $theFile)
 		file -reference -namespace (basenameEx($theFile)) $theFile ;
 		return(1);
 	}
-	
+	*/
 
 }

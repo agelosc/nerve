@@ -223,6 +223,8 @@ class Menu:
             self.ctrl['redshift'] = grp('Redshift', parent=self.ctrl['render'])
             if True: # Redshift
                 parent = self.ctrl['redshift']
+                sep('Lights', parent)
+                itm('Quick Light Setup', parent, nerve.maya.tools.createQuickLightSetup)
                 sep('Assets', parent)
                 itm('Import Proxy Asset', parent, nerve.maya.tools.importRsProxy)
                 itm('Re-release to Proxy/MayaBinary', parent, nerve.maya.tools.releaseMayaToProxy)
@@ -245,6 +247,8 @@ class Menu:
             sep('Color Management', parent)
             itm('Linear workflow', parent, nerve.maya.tools.SetLinearColorManagement)
             itm('ACES workflow', parent, nerve.maya.tools.SetACESColorManagement)
+            sep('Rename', parent)
+            itm('Rename Material', parent, nerve.maya.tools.renameMaterial)
             sep('Smooth Render', parent)
             itm('Enable Smooth Render', parent, nerve.maya.tools.enableSmoothRender)
             itm('Disable Smooth Render', parent, nerve.maya.tools.disableSmoothRender)
@@ -253,6 +257,26 @@ class Menu:
             itm('Local Render Current Layer', parent, nerve.maya.tools.localRender, [True, True])
             itm('Local Render Command Only', parent, nerve.maya.tools.localRender, [True, False])
 
+        self.ctrl['modeling'] = grp('Modeling')
+        parent = self.ctrl['modeling']
+        sep('Pivot', parent)
+        itm('Center Pivot', parent, nerve.maya.tools.centerPivots)
+        itm('Center Pivot at Base', parent, nerve.maya.tools.centerPivotAtBase)
+        itm('Center Pivot at Base and Grid', parent, nerve.maya.tools.centerPivotAtBaseAndGrid)
+        itm('Set Pivot to Origin', parent, nerve.maya.tools.freezePivot)
+        sep('Freeze', parent)
+        itm('Freeze Transform', parent, nerve.maya.tools.freezeTransforms)
+        itm('Freeze Transform except Scale', parent, nerve.maya.tools.freezeTransformsNoScale)
+        sep('UVs', parent)
+        itm('Flatten UV Sets', parent, nerve.maya.tools.flattenUVSets)
+        sep('Normals', parent)
+        itm('Reset Normals', parent, nerve.maya.tools.resetNormals)
+        sep('Tools', parent)
+        itm('Merge Vertices', parent, nerve.maya.tools.mergeVertices)
+        itm('Extrude', parent, nerve.maya.tools.extrude)
+        itm('Edge Loop', parent, nerve.maya.tools.edgeLoop)
+        itm('Bevel', parent, nerve.maya.tools.bevel)
+        
     def Manager(self, *args):
         Manager(args[0], args[1])
 
@@ -347,7 +371,7 @@ class Base:
         return cmds.frameLayout(**kwargs)
 
 class Manager(Base):
-    def __init__(self, action='release'):
+    def __init__(self, action='release', **kwargs):
         import time
 
         self.name = 'nerver'
@@ -355,7 +379,7 @@ class Manager(Base):
         self.height = 720
         self.col1 = 60
         self.cover = 'render_swColorPerVertex.png'
-        self.initAction = action
+        #self.initAction = action
 
         self.time = time.time()
         self.clicks = 0
@@ -363,6 +387,20 @@ class Manager(Base):
         self.data = {}
         self.ctrl = {}
 
+        # Defaults
+        self.defaults = {}
+        self.defaults['action'] = action
+        self.defaults['job'] = nerve.Job().GetFilePath('job')
+        self.defaults['path'] = ''
+        self.defaults['version'] = None
+        for key in self.defaults.keys():
+            if key in kwargs.keys():
+                #if key == 'path':
+                    #kwargs[key]+= '/'
+                self.defaults[key] = kwargs[key]
+                
+
+        # Init Window
         if cmds.window(self.name, exists=True):
             cmds.deleteUI(self.name)
 
@@ -395,7 +433,7 @@ class Manager(Base):
             self.ctrl['releaseRadio'] = cmds.radioButton(label='Release', changeCommand=self.Refresh, select=True, width=width)
             self.ctrl['gatherRadio'] = cmds.radioButton(label='Gather', changeCommand=self.Refresh, width=width)
 
-            if self.initAction == 'release':
+            if self.defaults['action'] == 'release':
                 cmds.radioButton(self.ctrl['releaseRadio'], e=True, select=True)
             else:
                 cmds.radioButton(self.ctrl['gatherRadio'], e=True, select=True)
@@ -405,7 +443,7 @@ class Manager(Base):
         if True: # Job
             cmds.rowLayout(numberOfColumns=3, height=35)
             self.text('Job')
-            self.ctrl['job'] = self.textField(text=nerve.Job().GetFilePath('job'), textChangedCommand=self.Refresh)
+            self.ctrl['job'] = self.textField(text=self.defaults['job'], textChangedCommand=self.Refresh)
             cmds.text(u'\u25BC', width=30)
             self.ctrl['recentJobs'] = cmds.popupMenu('test', button=1)
             cmds.setParent('..')
@@ -420,7 +458,7 @@ class Manager(Base):
         if True: # Path
             cmds.rowLayout(numberOfColumns=2, height=40)
             self.text('Path')
-            self.ctrl['path'] = self.textField(textChangedCommand=self.Refresh, height=30)
+            self.ctrl['path'] = self.textField(textChangedCommand=self.Refresh, height=30, text=self.defaults['path'])
             cmds.setParent('..')
 
         if True: # Lists
@@ -685,6 +723,7 @@ class Manager(Base):
         args['job'] = self.GetData('job')
         args['path'] = path
         asset = nerve.Asset(**args)
+        
 
         # Versions
         versions = []
@@ -697,6 +736,14 @@ class Manager(Base):
         cmds.textScrollList(self.ctrl['versionlist'], e=True, removeAll=True, append=versions)
         if len(versionlist) and versionlist[0] in versions:
             cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=versionlist[0])
+            return True
+
+        if self.defaults['path']:
+            version = self.defaults['version']
+            if not version:
+                version = asset.GetVersions()[-1]
+            cmds.textScrollList(self.ctrl['versionlist'], e=True, selectItem=nerve.String.versionAsString(version))
+        
 
     def Refresh_pathlist(self):
         path = self.GetData('path')
@@ -737,6 +784,16 @@ class Manager(Base):
         # Reselect
         if len(pathlist) and pathlist[0] in children:
             cmds.textScrollList(self.ctrl['pathlist'], e=True, selectItem=pathlist[0])
+            return True
+        
+        
+        if not len(pathlist) and self.defaults['path']:
+            cmds.textScrollList(self.ctrl['pathlist'], e=True, selectItem=nerve.Path(self.defaults['path']).GetHead())
+            self.Refresh()
+        
+
+
+
 
     def Refresh_action(self):
         # Change Button label

@@ -9,13 +9,13 @@
 		{
 			"HOUDINI_PATH": {
 				"method":"prepend",
-				"value": ["C:/ProgramData/Redshift/Plugins/Houdini/19.0.383"]
+				"value": ["C:/ProgramData/Redshift/Plugins/Houdini/19.5.303"]
 			}
 		},
 		{
 			"PXR_PLUGINPATH_NAME": {
 				"method":"prepend",
-				"value": ["C:/ProgramData/Redshift/Plugins/Solaris/19.0.383"]
+				"value": ["C:/ProgramData/Redshift/Plugins/Solaris/19.5.303"]
 			}
 		},		
 		

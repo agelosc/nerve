@@ -1,0 +1,18 @@
+{
+    "recommends": "houdini_version >= '17.5.321'",
+
+    "env": [
+        {
+            "QLIB": "$NERVE_LOCAL_PATH/apps/houdini/tools/qLib",
+        },
+        {
+            "QOTL": "$QLIB/otls",
+        },
+        {
+            "HOUDINI_OTLSCAN_PATH": "$QOTL/base;$QOTL/future;$QOTL/experimental;$HOUDINI_OTLSCAN_PATH",
+        },
+    ],
+    
+    "path": "$QLIB",
+}
+

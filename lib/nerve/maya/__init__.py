@@ -29,8 +29,8 @@ def deferred():
     gMainWindow = mel.eval('global string $gMainWindow; $temp1=$gMainWindow;')
     if gMainWindow != '':
         print("NERVE 6::Loading UI...")
-        import UI
-        UI.Menu()
+        import nerve.maya.UI
+        nerve.maya.UI.Menu()
     
     # Set Job
     workspace = nerve.Path(cmds.workspace(q=True, o=True))
@@ -100,6 +100,36 @@ class Node:
         self.data = {}
 
     @staticmethod
+    def GetDependencies(node, data=None):
+        if data is None:
+            data = {}
+
+        # Textures
+        if 'textures' not in data.keys():
+            data['textures'] = []
+        for sg in Node.GetShadingEngines(node):
+            history = cmds.listHistory(sg, pruneDagObjects=True)
+            for n in history:
+                # File Node
+                if cmds.nodeType(n) == 'file':
+                    tex = cmds.getAttr(n + '.fileTextureName')
+                    if tex not in data['textures']:
+                        data['textures'].append(tex)
+                # RedshiftNormal
+                if cmds.nodeType(n) == 'RedshiftNormalMap':
+                    tex = cmds.getAttr(n + '.tex0')
+                    if tex not in data['textures']:
+                        data['textures'].append(tex)
+                # RedshiftSprite
+                if cmds.nodeType(n) == 'RedshiftSprite':
+                    tex = cmds.getAttr(n + '.tex0')
+                    if tex not in data['textures']:
+                        data['textures'].append(tex)                        
+        
+        return data
+        
+
+    @staticmethod
     def GetType(node):
         if cmds.nodeType(node) == 'transform':
             shape = cmds.listRelatives(node, s=True)
@@ -115,7 +145,7 @@ class Node:
         shape = None
         if cmds.nodeType(node) == 'transform':
             transform = node
-            tmp = cmds.listRelatives(transform, s=True)
+            tmp = cmds.listRelatives(transform, s=True, f=True)
             if tmp:
                 shape = tmp[0]
             
@@ -541,8 +571,8 @@ class Node:
                 del(args['name'])
                 node = cmds.createNode(ntype, name=shape, **args)
                 transform = cmds.listRelatives(node, p=True)[0]
-                cmds.rename(transform, name)
-                return True
+                transform = cmds.rename(transform, name)
+                return transform
             else:
                 return cmds.createNode(ntype, **args)
             
@@ -699,6 +729,46 @@ class Base:
                 cmds.setParent('..')
             cmds.setParent('..')
         cmds.setParent('..')
+
+class Asset(nerve.Asset, Base):
+    pass
+
+    def FindDependencies(self):
+        sel = cmds.ls(sl=True, l=True)
+        data = {}
+        for n in sel:
+            data = Node.GetDependencies(n, data)
+
+        if 'dependencies' not in self.data.keys():
+            self.data['dependencies'] = None
+
+        if self.data['dependencies'] is None:
+            self.data['dependencies'] = data
+            return self.data['dependencies']
+        
+        for key,val in self.data['dependencies'].items():
+            for k,v in data.items():
+                val+=v
+            val = list(set(val))
+
+        return self.data['dependencies']
+
+    def ReleaseDependencies(self):
+        table = {'file':'fileTextureName', 'RedshiftNormalMap':'tex0'}
+        targetPath = self.GetFilePath('root') + self.GetName()
+
+        sel = cmds.ls(sl=True, l=True)
+        for n in sel: # for each object
+            for sg in Node.GetShadingEngines(n): # for each shading node
+
+                history = cmds.listHistory(sg, pruneDagObjects=True)
+                for h in history: # for every node in graph
+                    for tnode, tattr in table.items():
+                        if cmds.nodeType(h) == tnode:
+                            source = nerve.Path(cmds.getAttr(h + '.' + tattr))
+                            target = targetPath + 'textures' + source.GetHead()
+                            source.Copy(target)
+                            cmds.setAttr(h + '.' + tattr, target.AsString(), type='string')
 
 class Alembic(nerve.Asset, Base):
     def __init__(self, path='', **kwargs):
@@ -1030,7 +1100,7 @@ class OBJ(nerve.Asset, Base):
     def GatherUI(self):
         self._GatherUI()        
 
-class Maya(nerve.Asset, Base):
+class Maya(Asset):
     def __init__(self, path='', **kwargs):
         nerve.Asset.__init__(self, path, **kwargs)
 
@@ -1041,6 +1111,10 @@ class Maya(nerve.Asset, Base):
         if not len(cmds.ls(sl=True)):
             print('Nothing Selected.'),
             return False
+
+        if 'dependencies' in kwargs.keys() and kwargs['dependencies'] is True:
+            #self.FindDependencies()
+            self.ReleaseDependencies()
 
         if not file:
             file = self.GetFilePath('session')

@@ -1,5 +1,4 @@
 import os, sys
-from re import L
 import json, time, logging
 
 class logger:
@@ -13,7 +12,8 @@ class logger:
         self.handler = logging.StreamHandler()
         self.format = logging.Formatter('%(levelname)s::%(message)s')
         self.handler.setFormatter(self.format)
-        self.log.addHandler(self.handler)
+        if not self.log.handlers:
+            self.log.addHandler(self.handler)
 
     def namespace(self):
         return False
@@ -627,13 +627,17 @@ class Path:
             return reader.read()
 
     def Copy(self, dest):
-        import shutil
+        import shutil, filecmp
         from shutil import copyfile
 
         dest = Path(dest)
         if dest.HasParent() and not dest.GetParent().Exists():
             os.makedirs( dest.GetParent().AsString() )
         
+        if dest.Exists() and filecmp.cmp(self.AsString(), dest.AsString()):
+            log.info('File copying skipped, files are exact copies already: {} -> {}'.format(str(self), str(dest.AsString())))
+            return str(dest)
+
         shutil.copyfile(self.AsString(), dest.AsString())
         return str(dest)
 
@@ -951,7 +955,8 @@ class Asset(Base):
         module = inspect.getmodule(self)
         #module = sys.modules[__name__]
         if not hasattr( module, formatLong ):
-            log.error('Module {} does not have a {} object class definition.'.format(__name__, formatLong))
+            #log.error('Module {} does not have a {} object class definition.'.format(__name__, formatLong))
+            raise Exception('Test')
             return False
         return getattr( module, formatLong)(**self.data)
 
@@ -1126,6 +1131,7 @@ class Asset(Base):
     
     def SetFormat(self, format):
         self.data['format'] = format
+        #self = self.GetFormatObject()
         return self
 
     def GetFormats(self):
